@@ -82,7 +82,7 @@ Before production: test two real businesses and a staff account; verify no cross
 - Search on the live trip list is voucher-number search; related client/driver/route search and advanced sort/filter controls remain planned.
 - The voucher contains core identity, route, odometer, time and place information. Advanced paper-voucher fidelity, embedded charge breakdowns and digital signatures remain planned.
 - No direct PDF-file generation or automated sharing: use browser printing. Multipage print output remains a manual acceptance gate.
-- No OCR, AI, voice, GPS, WhatsApp, email/SMS or payment gateway is connected. Their status is shown as not configured; there are no fabricated results. Add these only after the real core workflow passes acceptance, through server-side integrations with review/confirmation.
+- Smart assistant (`/assistant`): voice entry, questions, expense suggestions and business insights work on-device without any key; document scanning and free-form AI answers need the `smarttrip-ai` Edge Function and an OpenAI key (see AI_SETUP.md). All AI output is a reviewable draft, never an automatic write. GPS, WhatsApp, email/SMS and payment gateways are not connected; their status is shown as not configured.
 - Live unsaved forms are kept only in memory until saved; reload/close warnings do not replace saving a draft. No silent financial offline queue.
 
 ## Troubleshooting

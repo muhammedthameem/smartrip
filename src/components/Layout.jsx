@@ -21,6 +21,7 @@ import {
   Bell,
   WifiOff,
   Navigation,
+  Sparkles,
 } from "lucide-react";
 import { useApp } from "../lib/context";
 import { Button, Modal } from "./ui";
@@ -38,6 +39,7 @@ export const nav = [
   ["/maintenance", "Maintenance", Wrench],
   ["/fuel_logs", "Fuel logs", Fuel],
   ["/documents", "Documents", Files],
+  ["/assistant", "Smart assistant", Sparkles],
   ["/settings", "Settings", Settings],
 ];
 function NavItems({ close }) {

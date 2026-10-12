@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Pencil, Archive, ArrowRight, Download } from "lucide-react";
 import { modules } from "../lib/schema";
+import { suggestCategory } from "../lib/intelligence";
 import { useApp, useList, useDebounce } from "../lib/context";
 import { minor, money, today, downloadCsv } from "../lib/calculations";
 import {
@@ -242,16 +243,40 @@ export default function Records({ table }) {
                       onChange={(v) => setEdit({ ...edit, [k]: v })}
                     />
                   ) : type === "select" ? (
-                    <select
-                      value={edit[k] || opts[0]}
-                      onChange={(e) =>
-                        setEdit({ ...edit, [k]: e.target.value })
-                      }
-                    >
-                      {opts.map((o) => (
-                        <option key={o}>{o}</option>
-                      ))}
-                    </select>
+                    <>
+                      <select
+                        value={edit[k] || opts[0]}
+                        onChange={(e) =>
+                          setEdit({ ...edit, [k]: e.target.value })
+                        }
+                      >
+                        {opts.map((o) => (
+                          <option key={o}>{o}</option>
+                        ))}
+                      </select>
+                      {table === "expenses" &&
+                        k === "category" &&
+                        (() => {
+                          const hint = suggestCategory(
+                            (edit.name || "") + " " + (edit.notes || ""),
+                          );
+                          return hint !== "Other" &&
+                            hint !== (edit.category || opts[0]) ? (
+                            <span className="category-hint">
+                              Suggested: {hint}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setEdit({ ...edit, category: hint });
+                                }}
+                              >
+                                Use
+                              </button>
+                            </span>
+                          ) : null;
+                        })()}
+                    </>
                   ) : type === "textarea" ? (
                     <textarea
                       value={edit[k] || ""}

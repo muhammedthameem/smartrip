@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { Upload, ExternalLink, Check } from "lucide-react";
 import { useApp, useList } from "../lib/context";
 import {
@@ -42,7 +43,8 @@ export default function Documents() {
         subtitle="Original records. Safely kept. Manually verified."
       />
       <div className="notice">
-        OCR is not configured. Files are reviewed manually.{" "}
+        <Link to="/assistant">Scan documents with the Smart assistant</Link>.
+        Review extracted details before saving.{" "}
         {demo && "Private upload requires a connected Supabase project."}
       </div>
       <section className="panel padded">

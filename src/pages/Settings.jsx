@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ShieldCheck, Download, RotateCcw } from "lucide-react";
 import { useApp, useList } from "../lib/context";
 import { resetDemo, configured } from "../lib/repository";
+import { askAI } from "../lib/ai";
 import { PageHeader, Field, Button, Badge } from "../components/ui";
 export default function Settings() {
   const { api, demo, profile, refresh, notify, signOut } = useApp(),
@@ -16,7 +17,17 @@ export default function Settings() {
       timezone: "Asia/Kolkata",
     }),
     [busy, setBusy] = useState(false),
-    [install, setInstall] = useState(null);
+    [install, setInstall] = useState(null),
+    [aiReady, setAiReady] = useState(null);
+  useEffect(() => {
+    let active = true;
+    askAI(demo, { action: "status" })
+      .then((r) => active && setAiReady(!!r.ready))
+      .catch(() => active && setAiReady(false));
+    return () => {
+      active = false;
+    };
+  }, [demo]);
   useEffect(() => {
     if (rows[0]) setForm(rows[0]);
   }, [rows]);
@@ -79,8 +90,20 @@ export default function Settings() {
             <h2>Connections</h2>
             {[
               ["Supabase", configured ? "Configured" : "Not connected"],
-              ["OCR & document extraction", "Not configured"],
-              ["AI assistant / voice", "Not configured"],
+              [
+                "Document scanning (AI)",
+                aiReady == null
+                  ? "Checking"
+                  : aiReady
+                    ? "Connected"
+                    : "Server setup required",
+              ],
+              [
+                "AI assistant, voice drafts & suggestions",
+                aiReady ? "Connected" : "On-device mode",
+              ],
+              ["Voice dictation", "Browser dependent"],
+              ["Cost insights & unusual-cost warnings", "Available"],
               ["GPS tracking", "Not configured"],
               ["WhatsApp / email / SMS", "Not configured"],
               ["Online payments", "Not configured"],

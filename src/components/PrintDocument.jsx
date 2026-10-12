@@ -158,7 +158,9 @@ export default function PrintDocument({ kind, record: r, payments = [] }) {
                     <td data-label="Description">{i.description}</td>
                     <td data-label="Quantity">{i.quantity}</td>
                     <td data-label="Rate">{money(i.unit_minor)}</td>
-                    <td data-label="Amount">{money(invoiceTotal([i]).subtotal)}</td>
+                    <td data-label="Amount">
+                      {money(invoiceTotal([i]).subtotal)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

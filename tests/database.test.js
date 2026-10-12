@@ -17,6 +17,7 @@ test("PostgreSQL migration and adversarial tenant / financial checks", async () 
     "-- gen_random_uuid is built in to this PostgreSQL test runtime.",
   );
   await db.exec(migration);
+  await db.exec(await readFile(new URL('../supabase/migrations/002_ai.sql',import.meta.url),'utf8'));
   const a = "11111111-1111-4111-8111-111111111111",
     b = "22222222-2222-4222-8222-222222222222";
   await db.query("insert into auth.users(id) values($1),($2)", [a, b]);
@@ -36,6 +37,9 @@ test("PostgreSQL migration and adversarial tenant / financial checks", async () 
       [orgA, "A client"],
     )
   ).rows[0].id;
+  for(let n=0;n<30;n++) await db.query('select consume_ai_request()');
+  await assert.rejects(db.query('select consume_ai_request()'),/Hourly AI limit/);
+  await assert.rejects(db.query('update ai_usage set requests=0'),/permission denied/);
   const invoiceA = (
     await db.query(
       "insert into invoices(org_id,client_id,date,due_date,items,total_minor,discount_minor,tax_bps) values($1,$2,'2026-10-12','2026-10-12',$3,1,10000,1800) returning *",
@@ -172,6 +176,7 @@ test("PostgreSQL migration and adversarial tenant / financial checks", async () 
   await db.query("update profiles set role='driver' where id=$1", [b]);
   await as(b);
   assert.equal((await db.query("select * from invoices")).rows.length, 0);
+  await assert.rejects(db.query('select consume_ai_request()'),/Office access/);
   await assert.rejects(
     db.query("select report_data('2026-10-01','2026-10-31')"),
     /Not authorized/,

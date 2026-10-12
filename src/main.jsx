@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard")),
   Reports = lazy(() => import("./pages/Reports")),
   Settings = lazy(() => import("./pages/Settings")),
   Documents = lazy(() => import("./pages/Documents")),
+  Intelligence = lazy(() => import("./pages/Intelligence")),
   Notifications = lazy(() => import("./pages/Notifications"));
 class Boundary extends Component {
   state = { error: false };
@@ -81,6 +82,7 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="documents" element={<Documents />} />
+            <Route path="assistant" element={<Intelligence />} />
             <Route path="notifications" element={<Notifications />} />
             <Route
               path="*"
