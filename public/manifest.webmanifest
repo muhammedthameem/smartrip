@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "SmartTrip · Fleet Workspace",
+  "short_name": "SmartTrip",
+  "description": "Trips, fleet and finances in one workspace",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f8f5",
+  "theme_color": "#165b49",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

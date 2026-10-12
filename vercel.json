@@ -1,0 +1,14 @@
+{
+  "rewrites": [
+    {
+      "source": "/((?!assets/|icon|manifest.webmanifest|sw.js).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    }
+  ]
+}
