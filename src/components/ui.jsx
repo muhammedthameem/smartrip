@@ -9,9 +9,10 @@ import {
   Inbox,
 } from "lucide-react";
 import { useApp, useList, useDebounce } from "../lib/context";
-export function Button({ children, variant = "", ...props }) {
+export function Button({ children, variant = "", className = "", ...props }) {
+  const combinedClassName = ["btn", variant, className].filter(Boolean).join(" ");
   return (
-    <button className={"btn " + variant} {...props}>
+    <button className={combinedClassName} {...props}>
       {children}
     </button>
   );

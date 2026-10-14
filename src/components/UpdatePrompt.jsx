@@ -213,19 +213,22 @@ export default function UpdatePrompt() {
 
         <div className="update-actions">
           <Button
+            type="button"
             variant="secondary"
+            className="btn-update-later"
             onClick={() => setDismissed(true)}
             disabled={updating}
           >
             Later
           </Button>
           <Button
+            type="button"
             onClick={handleUpdateNow}
             disabled={updating}
             className="btn-update-primary"
           >
-            <RefreshCw size={17} className={updating ? "animate-spin" : ""} />
-            {updating ? "Updating & refreshing…" : "Update now"}
+            <RefreshCw size={16} className={updating ? "animate-spin" : ""} />
+            <span>{updating ? "Updating & refreshing…" : "Update now"}</span>
           </Button>
         </div>
       </div>
