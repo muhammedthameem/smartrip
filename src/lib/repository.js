@@ -2,8 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 import { seed } from "./demo";
 import { invoiceTotal, paidFor } from "./calculations";
 import { validateRecord } from "./validation";
-const url = import.meta.env.VITE_SUPABASE_URL,
-  key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const defaultUrl = "https://vwaczcwuagzmtpqvmjey.supabase.co";
+const defaultKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3YWN6Y3d1YWd6bXRwcXZtamV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MjM3MDIsImV4cCI6MjEwNzM5OTcwMn0.XFiyFnuzxx6g95ERZ6uvcvG4OUO4vSkSXyHuzd8U0Vc";
+
+const url = import.meta.env.VITE_SUPABASE_URL || defaultUrl;
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY || defaultKey;
 export const configured = !!(url && key);
 export const supabase = configured ? createClient(url, key) : null;
 const DEMO_KEY = "smarttrip-demo-v1";

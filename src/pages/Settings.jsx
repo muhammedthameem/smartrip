@@ -123,7 +123,10 @@ export default function Settings() {
             <h2>App updates & version</h2>
             <div className="list-row">
               <span>Installed build version</span>
-              <Badge>{typeof __APP_VERSION__ !== "undefined" ? "v" + __APP_VERSION__ : "v0.1.0"}</Badge>
+              <Badge>
+                {typeof __APP_VERSION__ !== "undefined" ? "v" + __APP_VERSION__ : "v0.1.0"}
+                {typeof __APP_COMMIT_HASH__ !== "undefined" && __APP_COMMIT_HASH__ ? ` (#${__APP_COMMIT_HASH__})` : ""}
+              </Badge>
             </div>
             <p className="muted">
               SmartTrip automatically detects updates whenever new code is deployed to the server. You can also manually check or preview the theme-based update popup.

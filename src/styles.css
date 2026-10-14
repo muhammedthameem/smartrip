@@ -2267,45 +2267,112 @@ select {
   color: #4a5c53;
 }
 
-.update-highlights {
+.update-git-box {
+  margin-top: 14px;
+  background: #f6faf7;
+  border: 1px solid #d8e5dc;
+  border-radius: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 14px;
-  background: #f8faf6;
-  border: 1px solid #e5ebe1;
-  border-radius: 12px;
-  padding: 12px 14px;
+  box-shadow: 0 2px 6px rgba(22, 91, 73, 0.04);
 }
 
-.update-item {
+.update-git-header {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #165b49;
 }
 
-.update-item .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  margin-top: 6px;
-  box-shadow: 0 0 0 3px rgba(22, 91, 73, 0.15);
+.update-git-tag {
+  background: #e1efe7;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  color: #124b3c;
+  font-weight: 700;
+}
+
+.update-git-message {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #193327;
+  line-height: 1.45;
+  padding-left: 2px;
+  word-break: break-word;
+}
+
+.update-git-commits {
+  border-top: 1px dashed #d5e3da;
+  padding-top: 9px;
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-git-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  color: #436553;
+}
+
+.update-commit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-commit-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: #274034;
+  line-height: 1.4;
+}
+
+.update-commit-hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  background: #e8f0eb;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #165b49;
+  font-weight: 600;
   flex-shrink: 0;
 }
 
-.update-item b {
-  display: block;
-  font-size: 13px;
-  color: #1d3329;
-  font-weight: 600;
+.update-commit-msg {
+  color: #3b5247;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.update-item small {
-  display: block;
-  font-size: 11.5px;
-  color: var(--muted);
-  line-height: 1.35;
+.update-safe-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #425c4e;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #eef5f1;
+  border-radius: 8px;
 }
 
 @keyframes spin {
