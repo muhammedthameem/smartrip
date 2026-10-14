@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ShieldCheck, Download, RotateCcw } from "lucide-react";
+import { ShieldCheck, Download, RotateCcw, Sparkles, RefreshCw } from "lucide-react";
 import { useApp, useList } from "../lib/context";
 import { resetDemo, configured } from "../lib/repository";
 import { askAI } from "../lib/ai";
@@ -118,6 +118,37 @@ export default function Settings() {
               project, run the SQL migration, set the public project URL and
               publishable key, and rebuild. Secret keys must stay server-side.
             </p>
+          </section>
+          <section className="panel padded">
+            <h2>App updates & version</h2>
+            <div className="list-row">
+              <span>Installed build version</span>
+              <Badge>{typeof __APP_VERSION__ !== "undefined" ? "v" + __APP_VERSION__ : "v0.1.0"}</Badge>
+            </div>
+            <p className="muted">
+              SmartTrip automatically detects updates whenever new code is deployed to the server. You can also manually check or preview the theme-based update popup.
+            </p>
+            <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("smarttrip-check-update"));
+                  notify("Checking for updates…");
+                }}
+              >
+                <RefreshCw size={15} /> Check for updates
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("smarttrip-check-update", { detail: { simulate: true } })
+                  );
+                }}
+              >
+                <Sparkles size={15} /> Preview update popup
+              </Button>
+            </div>
           </section>
           <section className="panel padded">
             <h2>Install SmartTrip</h2>

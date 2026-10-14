@@ -15,8 +15,14 @@ self.addEventListener("activate", (event) =>
       .then(() => self.clients.claim()),
   ),
 );
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  if (url.pathname === "/version.json") return;
   if (event.request.method !== "GET" || url.origin !== self.location.origin)
     return;
   if (!/^\/assets\/[A-Za-z0-9_-]+\.(js|css)$/.test(url.pathname)) return;
@@ -30,3 +36,4 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+

@@ -1,16 +1,48 @@
 import React, { useState } from "react";
-import { Navigation, ArrowRight, ShieldCheck } from "lucide-react";
+import { Navigation, ArrowRight, ShieldCheck, Eye, EyeOff, KeyRound } from "lucide-react";
 import { useApp } from "../lib/context";
 import { supabase, configured } from "../lib/repository";
 import { Button, Field } from "../components/ui";
+
+const REMEMBERED_CREDENTIALS_KEY = "smarttrip_saved_credentials";
+const REMEMBER_FLAG_KEY = "smarttrip_remember_enabled";
+
 export default function Login() {
-  const { enterDemo, session, refresh, error: sessionError } = useApp(),
-    [email, setEmail] = useState(""),
-    [password, setPassword] = useState(""),
-    [signup, setSignup] = useState(false),
-    [busy, setBusy] = useState(false),
-    [message, setMessage] = useState(""),
-    [business, setBusiness] = useState("");
+  const { enterDemo, session, refresh, error: sessionError } = useApp();
+
+  const [remember, setRemember] = useState(() => {
+    try {
+      const flag = localStorage.getItem(REMEMBER_FLAG_KEY);
+      return flag === null ? true : flag === "true";
+    } catch {
+      return true;
+    }
+  });
+
+  const [email, setEmail] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(REMEMBERED_CREDENTIALS_KEY));
+      return saved?.email || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const [password, setPassword] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(REMEMBERED_CREDENTIALS_KEY));
+      return saved?.password || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [signup, setSignup] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [business, setBusiness] = useState("");
+
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -26,6 +58,19 @@ export default function Login() {
           ? await supabase.auth.signUp({ email, password })
           : await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+
+        // Store or clear remembered credentials
+        if (remember) {
+          localStorage.setItem(REMEMBER_FLAG_KEY, "true");
+          localStorage.setItem(
+            REMEMBERED_CREDENTIALS_KEY,
+            JSON.stringify({ email, password })
+          );
+        } else {
+          localStorage.setItem(REMEMBER_FLAG_KEY, "false");
+          localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY);
+        }
+
         if (signup)
           setMessage("Check your email to confirm your account, then sign in.");
       }
@@ -35,6 +80,7 @@ export default function Login() {
       setBusy(false);
     }
   }
+
   return (
     <div className="login-page">
       <div className="login-story">
@@ -94,15 +140,45 @@ export default function Login() {
                   />
                 </Field>
                 <Field label="Password">
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    autoComplete={signup ? "new-password" : "current-password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
+                  <div className="password-input-wrap">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      minLength={8}
+                      autoComplete={signup ? "new-password" : "current-password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </Field>
+                {!session && (
+                  <div className="login-remember-row">
+                    <label className="remember-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={remember}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setRemember(checked);
+                          if (!checked) {
+                            localStorage.setItem(REMEMBER_FLAG_KEY, "false");
+                            localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY);
+                          }
+                        }}
+                      />
+                      <span>Remember password on this device</span>
+                    </label>
+                  </div>
+                )}
               </>
             )}
             <Button disabled={busy}>

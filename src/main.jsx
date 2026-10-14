@@ -6,7 +6,9 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import { Loading } from "./components/ui";
 import "./styles.css";
+import UpdatePrompt from "./components/UpdatePrompt";
 const Dashboard = lazy(() => import("./pages/Dashboard")),
+
   Records = lazy(() => import("./pages/Records")),
   Trips = lazy(() => import("./pages/Trips")),
   TripForm = lazy(() => import("./pages/TripForm")),
@@ -106,6 +108,7 @@ root.render(
   <Boundary>
     <Provider>
       <App />
+      <UpdatePrompt />
     </Provider>
   </Boundary>,
 );
