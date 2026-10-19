@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import { Loading } from "./components/ui";
 import "./styles.css";
 import UpdatePrompt from "./components/UpdatePrompt";
+import InstallPrompt from "./components/InstallPrompt";
 const Dashboard = lazy(() => import("./pages/Dashboard")),
 
   Records = lazy(() => import("./pages/Records")),
@@ -109,6 +110,7 @@ root.render(
     <Provider>
       <App />
       <UpdatePrompt />
+      <InstallPrompt />
     </Provider>
   </Boundary>,
 );

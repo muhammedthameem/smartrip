@@ -1,57 +1,120 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Sparkles, RefreshCw, X, ArrowRight, Zap, GitCommit, GitBranch, ShieldCheck } from "lucide-react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import {
+  Sparkles,
+  RefreshCw,
+  X,
+  ArrowRight,
+  Zap,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "./ui";
 
-const currentCommit = typeof __APP_COMMIT_HASH__ !== "undefined" ? __APP_COMMIT_HASH__ : null;
-const currentBuildTime = typeof __APP_BUILD_TIME__ !== "undefined" ? Number(__APP_BUILD_TIME__) : null;
+const currentCommit =
+  typeof __APP_COMMIT_HASH__ !== "undefined" && __APP_COMMIT_HASH__
+    ? __APP_COMMIT_HASH__
+    : null;
+const currentBuildTime =
+  typeof __APP_BUILD_TIME__ !== "undefined" && __APP_BUILD_TIME__
+    ? Number(__APP_BUILD_TIME__)
+    : null;
 
 export default function UpdatePrompt() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [versionInfo, setVersionInfo] = useState(null);
+  const lastCheckTimeRef = useRef(0);
+
+  // Clean cache-busting search param from URL on load
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("_v") || url.searchParams.has("_t")) {
+        url.searchParams.delete("_v");
+        url.searchParams.delete("_t");
+        const cleanPath =
+          url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : "") + url.hash;
+        window.history.replaceState({}, document.title, cleanPath);
+      }
+    } catch {}
+  }, []);
 
   const checkVersion = useCallback(async (isManual = false) => {
+    // 1. Skip automatic background checks in local Vite development mode
+    if (!isManual && import.meta.env.DEV) {
+      return false;
+    }
+
+    // Rate-limit checks to avoid rapid repeat requests
+    const now = Date.now();
+    if (!isManual && now - lastCheckTimeRef.current < 60000) {
+      return false;
+    }
+    lastCheckTimeRef.current = now;
+
     try {
-      const res = await fetch(`/version.json?_t=${Date.now()}`, {
+      const res = await fetch(`/version.json?_t=${now}`, {
         cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
+        headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
       });
       if (!res.ok) return false;
       const data = await res.json();
 
-      // 1. If server commit matches the running app's commit, we are already fully updated!
-      if (
-        data.commitHash &&
-        currentCommit &&
-        data.commitHash !== "latest" &&
-        data.commitHash === currentCommit
-      ) {
+      const serverCommit = data.commitHash && data.commitHash !== "latest" ? data.commitHash : null;
+      const serverBuildTime = data.buildTime ? Number(data.buildTime) : null;
+
+      // 2. Check if user ALREADY applied this commit or build in this browser
+      const appliedCommit = localStorage.getItem("smarttrip_applied_commit");
+      const appliedBuildTime = localStorage.getItem("smarttrip_applied_build_time");
+
+      if (serverCommit && appliedCommit && serverCommit === appliedCommit) {
+        setUpdateAvailable(false);
+        return false;
+      }
+      if (serverBuildTime && appliedBuildTime && String(serverBuildTime) === appliedBuildTime) {
         setUpdateAvailable(false);
         return false;
       }
 
-      // 2. If build time is not newer than our loaded build, no update is needed.
-      if (
-        data.buildTime &&
-        currentBuildTime &&
-        Number(data.buildTime) <= currentBuildTime
-      ) {
+      // 3. If server commit matches the running app's commit, we are already fully updated!
+      if (serverCommit && currentCommit && serverCommit === currentCommit) {
         setUpdateAvailable(false);
         return false;
       }
 
-      // 3. Check if user already refreshed to this exact commit in this tab session
-      const lastUpdated = sessionStorage.getItem("smarttrip_updated_commit");
-      if (lastUpdated && data.commitHash && lastUpdated === data.commitHash) {
+      // 4. Determine if there is truly a new git push or deployment:
+      let isNewPush = false;
+
+      if (serverCommit && currentCommit && serverCommit !== currentCommit) {
+        // Genuine new git push detected!
+        isNewPush = true;
+      } else if (serverBuildTime && currentBuildTime) {
+        // Fallback for hosting where commit SHA isn't embedded:
+        // Only trigger if server build is at least 60 seconds newer than running build
+        if (serverBuildTime - currentBuildTime > 60000) {
+          isNewPush = true;
+        }
+      }
+
+      if (!isNewPush) {
         setUpdateAvailable(false);
         return false;
       }
 
-      // A real new git commit or newer build exists!
+      // 5. Check if user already dismissed this specific commit in this session
+      const dismissedCommit = sessionStorage.getItem("smarttrip_dismissed_commit");
+      const isAlreadyDismissed =
+        (serverCommit && dismissedCommit === serverCommit) ||
+        (serverBuildTime && sessionStorage.getItem("smarttrip_dismissed_build") === String(serverBuildTime));
+
       setVersionInfo(data);
       setUpdateAvailable(true);
-      setDismissed(false);
+      if (isAlreadyDismissed) {
+        // Respect dismissal; do not pop back up in a loop!
+        setDismissed(true);
+      } else {
+        setDismissed(false);
+      }
       return true;
     } catch {
       return false;
@@ -59,17 +122,17 @@ export default function UpdatePrompt() {
   }, []);
 
   useEffect(() => {
-    // 1. Initial check after 3 seconds
+    // 1. Initial check after 5 seconds
     const initialTimer = setTimeout(() => {
       checkVersion();
-    }, 3000);
+    }, 5000);
 
-    // 2. Periodic poll every 45 seconds
+    // 2. Periodic poll every 5 minutes (300,000ms) - avoid aggressive loops
     const interval = setInterval(() => {
       checkVersion();
-    }, 45000);
+    }, 300000);
 
-    // 3. Check on tab visibility/focus
+    // 3. Check on tab visibility/focus (rate-limited via lastCheckTimeRef)
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         checkVersion();
@@ -80,41 +143,32 @@ export default function UpdatePrompt() {
 
     // 4. Service Worker update listener
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.ready.then((reg) => {
-        const swInterval = setInterval(() => {
-          reg.update().catch(() => {});
-        }, 60000);
-
-        reg.addEventListener("updatefound", () => {
-          const newWorker = reg.installing;
-          if (newWorker) {
-            newWorker.addEventListener("statechange", () => {
-              if (
-                newWorker.state === "installed" &&
-                navigator.serviceWorker.controller
-              ) {
-                checkVersion();
-              }
-            });
-          }
-        });
-
-        return () => clearInterval(swInterval);
-      }).catch(() => {});
+      navigator.serviceWorker.ready
+        .then((reg) => {
+          reg.addEventListener("updatefound", () => {
+            const newWorker = reg.installing;
+            if (newWorker) {
+              newWorker.addEventListener("statechange", () => {
+                if (
+                  newWorker.state === "installed" &&
+                  navigator.serviceWorker.controller
+                ) {
+                  checkVersion();
+                }
+              });
+            }
+          });
+        })
+        .catch(() => {});
     }
 
-    // 5. Custom event for manual preview or check
+    // 5. Custom event for manual check or preview from Settings
     const handleManualCheck = (e) => {
       if (e?.detail?.simulate) {
         setVersionInfo({
-          commitHash: currentCommit ? currentCommit.slice(0, 7) : "2940963",
-          commitMessage: "Fix update prompt & show latest git push changes",
+          commitHash: currentCommit ? currentCommit.slice(0, 7) : "735a9fe",
+          commitMessage: "Performance improvements & mobile shortcut enhancements",
           updatedAt: new Date().toISOString(),
-          recentCommits: [
-            { hash: currentCommit || "2940963", msg: "Fix update prompt & show latest git push changes" },
-            { hash: "6ef67d4", msg: "stylefix and button styling updates" },
-            { hash: "936279b", msg: "first commit" },
-          ],
         });
         setUpdateAvailable(true);
         setDismissed(false);
@@ -133,21 +187,43 @@ export default function UpdatePrompt() {
     };
   }, [checkVersion]);
 
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (versionInfo?.commitHash) {
+      sessionStorage.setItem("smarttrip_dismissed_commit", versionInfo.commitHash);
+    }
+    if (versionInfo?.buildTime) {
+      sessionStorage.setItem("smarttrip_dismissed_build", String(versionInfo.buildTime));
+    }
+  };
+
   const handleUpdateNow = async () => {
     setUpdating(true);
     try {
+      // 1. Mark this commit/build as applied so we NEVER prompt again for it
       if (versionInfo?.commitHash) {
+        localStorage.setItem("smarttrip_applied_commit", versionInfo.commitHash);
         sessionStorage.setItem("smarttrip_updated_commit", versionInfo.commitHash);
       }
+      if (versionInfo?.buildTime) {
+        localStorage.setItem("smarttrip_applied_build_time", String(versionInfo.buildTime));
+      }
+
+      // 2. Clear all Service Worker caches and notify SW
       if ("serviceWorker" in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
         for (const reg of registrations) {
           if (reg.waiting) {
             reg.waiting.postMessage({ type: "SKIP_WAITING" });
           }
+          if (reg.active) {
+            reg.active.postMessage({ type: "CLEAR_CACHE" });
+          }
           await reg.update().catch(() => {});
         }
       }
+
+      // 3. Clear browser cache storage
       if ("caches" in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((k) => caches.delete(k)));
@@ -155,9 +231,12 @@ export default function UpdatePrompt() {
     } catch (err) {
       console.warn("Update cleanup notice:", err);
     } finally {
+      // 4. Force browser to reload new index.html & assets with cache-busting timestamp
       setTimeout(() => {
-        window.location.reload();
-      }, 200);
+        const targetUrl = new URL(window.location.href);
+        targetUrl.searchParams.set("_v", String(Date.now()));
+        window.location.replace(targetUrl.toString());
+      }, 250);
     }
   };
 
@@ -166,7 +245,11 @@ export default function UpdatePrompt() {
   // Floating pill when dismissed
   if (dismissed) {
     return (
-      <div className="update-pill-container" role="region" aria-label="App update available">
+      <div
+        className="update-pill-container"
+        role="region"
+        aria-label="App update available"
+      >
         <button
           type="button"
           className="update-pill-btn"
@@ -175,7 +258,7 @@ export default function UpdatePrompt() {
         >
           <span className="update-pill-glow" />
           <Sparkles size={16} />
-          <span>New update ready {versionInfo?.commitHash ? `(#${versionInfo.commitHash})` : ""}</span>
+          <span>New update ready</span>
           <ArrowRight size={14} />
         </button>
       </div>
@@ -183,19 +266,24 @@ export default function UpdatePrompt() {
   }
 
   return (
-    <div className="update-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="update-title">
+    <div
+      className="update-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="update-title"
+    >
       <div className="update-modal-card">
         <div className="update-modal-top">
           <div className="update-icon-box">
             <Sparkles size={24} />
           </div>
           <span className="update-chip-badge">
-            <Zap size={13} /> GIT UPDATE AVAILABLE
+            <Zap size={13} /> UPDATE AVAILABLE
           </span>
           <button
             type="button"
             className="update-close-btn"
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             aria-label="Remind me later"
           >
             <X size={18} />
@@ -203,45 +291,27 @@ export default function UpdatePrompt() {
         </div>
 
         <div className="update-content">
-          <h2 id="update-title">New updates pushed to SmartTrip</h2>
+          <h2 id="update-title">Update available</h2>
           <p>
-            A new version has been deployed. Refresh now to smoothly update your workspace with the latest git changes.
+            A new version of SmartTrip has been deployed. Refresh now to apply
+            the latest improvements and features.
           </p>
 
           <div className="update-git-box">
             <div className="update-git-header">
-              <GitCommit size={16} />
-              <span>Latest Git Commit</span>
-              {versionInfo?.commitHash && (
-                <code className="update-git-tag">#{versionInfo.commitHash}</code>
-              )}
+              <Sparkles size={14} />
+              <span>What's new</span>
             </div>
-
             <div className="update-git-message">
-              “{versionInfo?.commitMessage || "Latest enhancements, bug fixes, and performance updates"}”
+              “{versionInfo?.commitMessage || "Performance enhancements, bug fixes, and latest updates"}”
             </div>
-
-            {versionInfo?.recentCommits && versionInfo.recentCommits.length > 0 && (
-              <div className="update-git-commits">
-                <div className="update-git-title">
-                  <GitBranch size={13} />
-                  <span>Recent Git Changes:</span>
-                </div>
-                <ul className="update-commit-list">
-                  {versionInfo.recentCommits.slice(0, 3).map((c, i) => (
-                    <li key={c.hash || i} className="update-commit-item">
-                      <code className="update-commit-hash">#{c.hash}</code>
-                      <span className="update-commit-msg">{c.msg}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
 
           <div className="update-safe-note">
             <ShieldCheck size={15} color="#165b49" />
-            <span>Instant safe refresh: your active records and settings remain safe.</span>
+            <span>
+              Instant safe refresh: your active records and settings remain safe.
+            </span>
           </div>
         </div>
 
@@ -250,7 +320,7 @@ export default function UpdatePrompt() {
             type="button"
             variant="secondary"
             className="btn-update-later"
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             disabled={updating}
           >
             Later

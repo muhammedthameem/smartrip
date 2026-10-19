@@ -2510,3 +2510,327 @@ select {
   background: linear-gradient(180deg, #165b49, #48b896);
 }
 
+/* ==========================================================================
+   PWA Install Prompt Modal (Theme-based for Android & iOS)
+   ========================================================================== */
+.install-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 28, 22, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 16px;
+  animation: installFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.install-modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: #ffffff;
+  border: 1px solid rgba(22, 91, 73, 0.16);
+  border-radius: 22px;
+  box-shadow:
+    0 24px 60px -12px rgba(18, 54, 43, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: installSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes installFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes installSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.install-modal-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.install-app-icon-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #165b49 0%, #207e65 100%);
+  padding: 6px;
+  box-shadow: 0 8px 18px -4px rgba(22, 91, 73, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.install-app-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.install-app-status-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #10b981;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.install-modal-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.install-chip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #e6f3ec;
+  color: var(--green);
+  border: 1px solid rgba(22, 91, 73, 0.2);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.install-close-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  padding: 6px;
+  color: var(--muted);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.install-close-btn:hover {
+  background: #f0f3ef;
+  color: #1a2c24;
+}
+
+.install-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.install-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: #1a2c24;
+  line-height: 1.3;
+}
+
+.install-desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #53635a;
+}
+
+.install-benefits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #f8faf7;
+  border: 1px solid #e5ebe2;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.install-benefit-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #2e4339;
+  font-weight: 500;
+}
+
+.benefit-icon {
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+.install-steps-card {
+  background: #ffffff;
+  border: 1px dashed rgba(22, 91, 73, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.install-steps-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.install-steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.install-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #273b31;
+}
+
+.step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #165b49;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.step-text {
+  flex: 1;
+}
+
+.ios-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef3ed;
+  border: 1px solid #ccd8c8;
+  border-radius: 5px;
+  padding: 1px 4px;
+  vertical-align: middle;
+  color: var(--green);
+}
+
+.install-safe-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  padding-top: 2px;
+}
+
+.install-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #edf1eb;
+}
+
+.btn-install-cancel {
+  background: #f1f4f0 !important;
+  color: #44544c !important;
+  border: 1px solid #d9e0d7 !important;
+}
+
+.btn-install-cancel:hover {
+  background: #e7ece5 !important;
+  color: #22322a !important;
+}
+
+.btn-install-primary {
+  background: linear-gradient(135deg, #165b49 0%, #1e705b 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid #134e3f !important;
+  box-shadow: 0 4px 14px rgba(22, 91, 73, 0.28);
+  font-weight: 600;
+}
+
+.btn-install-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #134e3f 0%, #19604e 100%) !important;
+  box-shadow: 0 6px 18px rgba(22, 91, 73, 0.38);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 480px) {
+  .install-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .install-modal-card {
+    border-radius: 24px 24px 0 0;
+    max-width: 100%;
+    padding: 22px 20px calc(22px + env(safe-area-inset-bottom, 0px)) 20px;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25);
+    animation: installSlideUpMobile 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes installSlideUpMobile {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .install-actions {
+    flex-direction: column-reverse;
+    width: 100%;
+    gap: 10px;
+  }
+  .install-actions .btn {
+    width: 100%;
+    height: 46px;
+    justify-content: center;
+    font-size: 14.5px;
+  }
+}
+
+

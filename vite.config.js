@@ -6,8 +6,18 @@ import fs from "fs";
 import path from "path";
 
 function getGitInfo() {
-  let commitHash = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7);
-  let commitMessage = process.env.VERCEL_GIT_COMMIT_MESSAGE || "";
+  let commitHash = (
+    process.env.GITHUB_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.SUPABASE_GIT_COMMIT_SHA ||
+    process.env.CF_PAGES_COMMIT_SHA ||
+    process.env.COMMIT_REF ||
+    ""
+  ).slice(0, 7);
+  let commitMessage =
+    process.env.GITHUB_COMMIT_MESSAGE ||
+    process.env.VERCEL_GIT_COMMIT_MESSAGE ||
+    "";
   let commitDate = "";
   let recentCommits = [];
 
@@ -57,15 +67,18 @@ function versionTrackerPlugin() {
   return {
     name: "version-tracker",
     buildStart() {
-      try {
-        const pubDir = path.resolve(process.cwd(), "public");
-        if (fs.existsSync(pubDir)) {
-          fs.writeFileSync(
-            path.join(pubDir, "version.json"),
-            JSON.stringify(versionPayload, null, 2)
-          );
-        }
-      } catch {}
+      // In production builds, make sure public/version.json is updated
+      if (process.env.NODE_ENV === "production") {
+        try {
+          const pubDir = path.resolve(process.cwd(), "public");
+          if (fs.existsSync(pubDir)) {
+            fs.writeFileSync(
+              path.join(pubDir, "version.json"),
+              JSON.stringify(versionPayload, null, 2)
+            );
+          }
+        } catch {}
+      }
     },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {

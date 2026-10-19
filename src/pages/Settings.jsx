@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { ShieldCheck, Download, RotateCcw, Sparkles, RefreshCw } from "lucide-react";
+import { ShieldCheck, Download, RotateCcw, Sparkles, RefreshCw, Smartphone, Apple, CheckCircle2 } from "lucide-react";
 import { useApp, useList } from "../lib/context";
 import { resetDemo, configured } from "../lib/repository";
 import { askAI } from "../lib/ai";
 import { PageHeader, Field, Button, Badge } from "../components/ui";
+import { isAppInstalled } from "../components/InstallPrompt";
 export default function Settings() {
   const { api, demo, profile, refresh, notify, signOut } = useApp(),
     { rows } = useList("settings", { limit: 1 }),
@@ -154,25 +155,70 @@ export default function Settings() {
             </div>
           </section>
           <section className="panel padded">
-            <h2>Install SmartTrip</h2>
+            <h2>Install SmartTrip on phone</h2>
+            <div className="list-row" style={{ marginBottom: "10px" }}>
+              <span>Home screen app status</span>
+              {isAppInstalled() ? (
+                <Badge style={{ background: "#e6f3ec", color: "#165b49" }}>
+                  <CheckCircle2 size={13} /> Installed PWA
+                </Badge>
+              ) : (
+                <Badge>Running in browser</Badge>
+              )}
+            </div>
             <p>
-              On supported browsers, use “Install app” or “Add to Home Screen”.
-              On iPhone, use Safari’s Share menu. Live records require an
-              internet connection.
+              SmartTrip features automatic mobile detection. If not installed on an Android or iOS phone, a theme-based shortcut popup automatically prompts the user to add SmartTrip to their home screen. Once installed, the popup is hidden.
             </p>
-            {install && (
+            {install && !isAppInstalled() && (
+              <div style={{ marginTop: "10px", marginBottom: "10px" }}>
+                <Button
+                  onClick={async () => {
+                    await install.prompt();
+                    setInstall(null);
+                  }}
+                >
+                  <Download size={16} /> Install to home screen
+                </Button>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
               <Button
-                onClick={async () => {
-                  await install.prompt();
-                  setInstall(null);
+                variant="secondary"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("smarttrip-open-install-prompt", {
+                      detail: { platform: "android" },
+                    })
+                  );
                 }}
               >
-                <Download size={16} /> Install app
+                <Smartphone size={15} /> Preview Android Popup
               </Button>
-            )}
-            <p className="muted">
-              Installation and background features depend on your browser and
-              operating system.
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("smarttrip-open-install-prompt", {
+                      detail: { platform: "ios" },
+                    })
+                  );
+                }}
+              >
+                <Apple size={15} /> Preview iOS Popup
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  localStorage.removeItem("smarttrip_install_dismissed_until");
+                  localStorage.removeItem("smarttrip_pwa_installed");
+                  notify("Install prompt snooze cleared");
+                }}
+              >
+                <RotateCcw size={15} /> Reset install snooze
+              </Button>
+            </div>
+            <p className="muted" style={{ marginTop: "12px" }}>
+              Android uses native WebAPK installation. iOS creates a direct Safari home screen shortcut.
             </p>
           </section>
           {demo && (

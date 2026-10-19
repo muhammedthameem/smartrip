@@ -19,6 +19,9 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+  if (event.data && event.data.type === "CLEAR_CACHE") {
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+  }
 });
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
