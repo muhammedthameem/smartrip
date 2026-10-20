@@ -23,11 +23,13 @@ import {
   Badge,
 } from "../components/ui";
 import { TripCard } from "./Trips";
+import NewTripModal from "../components/NewTripModal";
 export default function Dashboard() {
   const { api, version } = useApp(),
     [data, setData] = useState(null),
     [error, setError] = useState(""),
-    [period, setPeriod] = useState("month");
+    [period, setPeriod] = useState("month"),
+    [showNewModal, setShowNewModal] = useState(false);
   const end = today(),
     start = period === "today" ? end : end.slice(0, 8) + "01";
   const { rows: trips } = useList("trips", { limit: 3 }),
@@ -73,10 +75,11 @@ export default function Dashboard() {
           <option value="month">This month</option>
           <option value="today">Today</option>
         </select>
-        <Link className="btn" to="/trips/new">
+        <Button onClick={() => setShowNewModal(true)}>
           <Plus size={18} /> New trip
-        </Link>
+        </Button>
       </PageHeader>
+      <NewTripModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} />
       <section className="welcome-banner">
         <div>
           <Badge>YOUR OPERATIONS, CONNECTED</Badge>

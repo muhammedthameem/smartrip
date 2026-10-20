@@ -41,6 +41,9 @@ export default function TripDetail() {
   return (
     <>
       <PageHeader title={trip.name} subtitle={"Journey on " + trip.date}>
+        <Link className="btn secondary" to={"/driver?tripId=" + id}>
+          <Navigation size={16} /> Driver mode
+        </Link>
         <Link className="btn secondary" to={"/trips/" + id + "/edit"}>
           <Pencil size={16} /> Edit trip
         </Link>
@@ -86,7 +89,7 @@ export default function TripDetail() {
         <p>{trip.notes}</p>
       </section>
 
-      {packageDays.length > 0 && (
+      {packageDays.length > 0 ? (
         <section className="package-progress-card">
           <div className="package-progress-header">
             <div>
@@ -95,7 +98,7 @@ export default function TripDetail() {
                 Multi-day Package Itinerary ({packageDays.filter((d) => d.status === "completed").length} of {packageDays.length} days completed)
               </p>
             </div>
-            <Link className="btn secondary" to="/driver">
+            <Link className="btn secondary" to={"/driver?tripId=" + id}>
               <Navigation size={15} /> Open in Driver Mode
             </Link>
           </div>
@@ -215,7 +218,21 @@ export default function TripDetail() {
             })}
           </div>
         </section>
-      )}
+      ) : trip.status !== "cancelled" ? (
+        <section className="package-progress-card">
+          <div className="package-progress-header">
+            <div>
+              <h2 className="text-base font-bold text-emerald-950">DRIVER DAILY MODE</h2>
+              <p className="text-xs text-muted m-0">
+                Operate this trip in Driver Daily Trip Mode with live GPS stops, fuel expenses, and odometer logging.
+              </p>
+            </div>
+            <Link className="btn secondary" to={"/driver?tripId=" + id}>
+              <Navigation size={15} /> Open in Driver Mode
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <div className="two-cols">
         <section className="panel padded">

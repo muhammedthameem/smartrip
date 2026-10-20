@@ -1,6 +1,8 @@
 -- SmartTrip: Driver Daily Trip Mode & Multi-Day Package Itinerary
 begin;
 
+alter table public.trips add column if not exists package_name text;
+
 create table if not exists public.trip_days (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),

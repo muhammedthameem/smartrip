@@ -99,15 +99,25 @@ export function Provider({ children }) {
 
     supabase.auth
       .getSession()
-      .then(({ data, error }) => {
-        if (error) {
-          const friendly = formatAuthError(error.message);
-          setError(friendly);
-          if (error.message?.toLowerCase().includes("jwt expired")) {
+      .then(async ({ data, error }) => {
+        let s = data?.session || null;
+        const expired =
+          (error && /jwt expired|token/i.test(error.message || "")) ||
+          (s?.expires_at && s.expires_at * 1000 < Date.now());
+        if (expired) {
+          // Silent refresh first — only show login if the refresh token is also dead
+          const r = await supabase.auth.refreshSession().catch((e) => ({ error: e }));
+          if (r?.data?.session) {
+            s = r.data.session;
+          } else {
+            setError(formatAuthError(error?.message || "JWT expired"));
             supabase.auth.signOut().catch(() => {});
+            s = null;
           }
+        } else if (error) {
+          setError(formatAuthError(error.message));
         }
-        setSession(data?.session || null);
+        setSession(s);
         setLoading(false);
       })
       .catch(() => {
@@ -115,8 +125,11 @@ export function Provider({ children }) {
       });
 
     const { data } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s);
-      setProfile(null);
+      setSession((prev) => {
+        // Token refreshes keep the same user — don't reset the profile (avoids kicking to login)
+        if (!s || event === "SIGNED_OUT" || prev?.user?.id !== s?.user?.id) setProfile(null);
+        return s;
+      });
       if (s) setError("");
     });
     return () => data?.subscription?.unsubscribe();

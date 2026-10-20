@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Navigation,
   CarFront,
@@ -25,6 +25,9 @@ import {
   Calendar,
   Layers,
   ChevronDown,
+  Lock,
+  LocateFixed,
+  Pencil,
 } from "lucide-react";
 import { useApp } from "../lib/context";
 import { today, money, minor, distance } from "../lib/calculations";
@@ -37,19 +40,70 @@ import {
   calculateDistanceKm,
 } from "../lib/location";
 import { Button, Badge, Loading } from "../components/ui";
+import RidePicker from "../components/RidePicker";
+import { useRideTracker, startTrack, clearTrack } from "../lib/useRideTracker";
+import EditRideSheet from "../components/EditRideSheet";
+
+const rideMissingFields = (t) => {
+  if (!t) return [];
+  const m = [];
+  if (!t.client_id && !t.client?.id) m.push("client");
+  if (!t.vehicle_id && !t.vehicle?.id) m.push("vehicle");
+  if (!t.is_booking && !t.driver_id && !t.driver?.id) m.push("driver");
+  if (!String(t.origin || "").trim()) m.push("pickup");
+  if (!String(t.destination || "").trim()) m.push("destination");
+  return m;
+};
+
+// Planned stops may be stored as strings (demo) or objects like { name, place, label } (Supabase)
+const placeLabel = (p) => {
+  if (p == null) return "";
+  if (typeof p === "string") return p.trim();
+  if (typeof p === "object")
+    return String(p.name || p.place || p.label || p.title || p.destination || p.formatted || "").trim();
+  return String(p).trim();
+};
+
+const normalizeDay = (d) => {
+  let planned = d?.planned_destinations;
+  if (typeof planned === "string") {
+    try {
+      planned = JSON.parse(planned);
+    } catch {
+      planned = planned.split(",");
+    }
+  }
+  return {
+    ...d,
+    // A day saved as "in progress" but never actually started (no started_at) is really pending
+    status: d?.status === "in progress" && !d?.started_at ? "pending" : d?.status,
+    start_place: placeLabel(d?.start_place || d?.origin),
+    end_place: placeLabel(d?.end_place || d?.destination),
+    planned_destinations: (Array.isArray(planned) ? planned : []).map(placeLabel).filter(Boolean),
+  };
+};
 
 export default function DriverTrip() {
   const { api, demo, profile, notify, version, refresh } = useApp();
 
   // State
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tripIdParam = searchParams.get("tripId");
   const [trip, setTrip] = useState(null);
+  const [driverItems, setDriverItems] = useState({ trips: [], bookings: [], all: [] });
   const [days, setDays] = useState([]);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionModal, setActionModal] = useState(null); // 'start_day' | 'reached_place' | 'expense' | 'odometer' | 'end_day' | 'days_overview'
+  const [actionModal, setActionModal] = useState(null); // 'start_ride' | 'complete_ride' | 'select_ride' | 'start_day' | 'reached_place' | 'expense' | 'odometer' | 'end_day' | 'days_overview'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  // Start Ride & Complete Ride form state
+  const [rideStartOdo, setRideStartOdo] = useState("");
+  const [rideCompleteOdo, setRideCompleteOdo] = useState("");
+  const [rideCompleteNotes, setRideCompleteNotes] = useState("");
+
 
   // Start Day form state
   const [startOdo, setStartOdo] = useState("");
@@ -83,57 +137,111 @@ export default function DriverTrip() {
 
   const activeDay = days[selectedDayIndex] || null;
 
-  // Load assigned trip & days
-  useEffect(() => {
-    let active = true;
+  // Ride-level live GPS tracking (covers the whole package while the ride is active)
+  const [startGps, setStartGps] = useState({ status: "idle", coords: null, place: "", error: "" });
+  const [skipStartGps, setSkipStartGps] = useState(false);
+  const rideLive = !!trip && !trip.is_booking && trip.status === "in progress";
+  const tracker = useRideTracker({
+    tripId: rideLive ? trip.id : null,
+    active: rideLive,
+    onSync: (km) => api.updateTripGpsKm?.(trip.id, km),
+  });
+
+  const requestStartGps = async () => {
+    setStartGps({ status: "locating", coords: null, place: "", error: "" });
+    try {
+      const pos = await getCurrentPosition({ timeout: 15000, maximumAge: 0 });
+      setStartGps({ status: "ok", coords: pos, place: "", error: "" });
+      reverseGeocode(pos.latitude, pos.longitude)
+        .then((geo) =>
+          setStartGps((s) =>
+            s.status === "ok" ? { ...s, place: geo?.name || geo?.formatted || "" } : s
+          )
+        )
+        .catch(() => {});
+    } catch (err) {
+      setStartGps({
+        status: err.code === 1 ? "denied" : "error",
+        coords: null,
+        place: "",
+        error: err.message,
+      });
+    }
+  };
+
+  // Central item loader: loads both trips & bookings, and retrieves assigned item
+  const loadAssignedItem = async (targetId) => {
     setLoading(true);
     setError("");
+    try {
+      const driverId = profile?.role === "driver" ? profile.id : null;
+      // Load both trips and bookings
+      const items = await api.getDriverItems(driverId);
+      setDriverItems(items);
 
-    api
-      .getAssignedDriverTrip(profile?.role === "driver" ? profile.id : null)
-      .then(async (assigned) => {
-        if (!active) return;
-        if (!assigned) {
-          setTrip(null);
-          setDays([]);
-          setLoading(false);
-          return;
-        }
-        setTrip(assigned);
-        const dayList = await api.getTripDays(assigned.id);
-        if (!active) return;
-        setDays(dayList);
-
-        // Find currently active day or first non-completed day
-        let currentIdx = dayList.findIndex((d) => d.status === "in progress");
-        if (currentIdx === -1) {
-          currentIdx = dayList.findIndex((d) => d.status === "pending");
-        }
-        if (currentIdx === -1) currentIdx = 0;
-        setSelectedDayIndex(currentIdx);
-
-        // Load timeline for active day
-        if (dayList[currentIdx]) {
-          const t = await api.getTripDayTimeline(dayList[currentIdx].id);
-          if (active) setTimeline(t);
-        }
+      const assigned = await api.getAssignedDriverTrip(driverId, targetId);
+      if (!assigned) {
+        setTrip(null);
+        setDays([]);
         setLoading(false);
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err.message);
-          setLoading(false);
-        }
-      });
+        return;
+      }
 
-    return () => {
-      active = false;
-    };
-  }, [api, profile, version]);
+      setTrip(assigned);
+
+      // Ensure dayList has at least 1 day
+      let dayList = assigned.days && assigned.days.length ? assigned.days : [];
+      if (!dayList.length && !assigned.is_booking) {
+        dayList = await api.ensureTripDays(assigned.id);
+      }
+      if (!dayList || !dayList.length) {
+        dayList = [
+          {
+            id: `day-${assigned.id}-1`,
+            trip_id: assigned.id,
+            day_number: 1,
+            date: assigned.date || today(),
+            start_place: assigned.origin || "Pickup Point",
+            end_place: assigned.destination || "Destination",
+            planned_destinations: assigned.destination ? [assigned.destination] : [],
+            status: assigned.status === "in progress" ? "in progress" : "pending",
+            opening_km: assigned.opening_km || assigned.vehicle?.odometer || null,
+            closing_km: assigned.closing_km || null,
+          },
+        ];
+      }
+      dayList = dayList.map(normalizeDay);
+      setDays(dayList);
+
+      let currentIdx = dayList.findIndex((d) => d.status === "in progress");
+      if (currentIdx === -1) {
+        currentIdx = dayList.findIndex((d) => d.status === "pending");
+      }
+      if (currentIdx === -1) currentIdx = 0;
+      setSelectedDayIndex(currentIdx);
+
+      // Load timeline if day exists and not a plain booking
+      if (dayList[currentIdx] && !assigned.is_booking) {
+        const t = await api.getTripDayTimeline(dayList[currentIdx].id).catch(() => []);
+        setTimeline(t || []);
+      } else {
+        setTimeline([]);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load assigned trip/booking on mount or when tripIdParam changes
+  useEffect(() => {
+    loadAssignedItem(tripIdParam);
+  }, [api, profile, version, tripIdParam]);
 
   // Reload timeline when active day changes
   useEffect(() => {
-    if (!activeDay) return;
+    if (!activeDay || trip?.is_booking) return;
     let active = true;
     api
       .getTripDayTimeline(activeDay.id)
@@ -144,15 +252,173 @@ export default function DriverTrip() {
     };
   }, [api, activeDay?.id, version]);
 
+  // Item selector handler
+  const handleSelectItem = (item) => {
+    setSearchParams({ tripId: item.id });
+    setActionModal(null);
+    loadAssignedItem(item.id);
+  };
+
+  // Start Ride handlers
+  const openStartRideModal = () => {
+    setError("");
+    const missing = rideMissingFields(trip);
+    if (missing.length) {
+      notify(`Add ${missing.join(", ")} before starting this ride.`);
+      setActionModal("edit_ride");
+      return;
+    }
+    const defaultOdo =
+      trip.opening_km != null
+        ? trip.opening_km
+        : trip.vehicle?.odometer != null
+          ? trip.vehicle.odometer
+          : "";
+    setRideStartOdo(defaultOdo ? String(defaultOdo) : "");
+    setStartSource("manual");
+    setSkipStartGps(false);
+    requestStartGps();
+    setActionModal("start_ride");
+  };
+
+  const handleConfirmStartRide = async (e) => {
+    e.preventDefault();
+    const km = Number(rideStartOdo);
+    if (!km || km < 0) {
+      setError("Please enter a valid opening odometer reading.");
+      return;
+    }
+    if (!startGps.coords && !skipStartGps) {
+      setError("Turn on GPS to start live tracking, or tap “Start without GPS”.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      let started;
+      if (trip.is_booking) {
+        started = await api.startBookingRide(trip.id, {
+          opening_km: km,
+          opening_source: startSource,
+          started_at: new Date().toISOString(),
+        });
+      } else {
+        started = await api.startTripRide(trip.id, {
+          opening_km: km,
+          opening_source: startSource,
+          started_at: new Date().toISOString(),
+        });
+      }
+      const rideId = started?.id || trip.id;
+      const c = startGps.coords;
+      startTrack(
+        rideId,
+        c ? { lat: c.latitude, lng: c.longitude, acc: c.accuracy, t: Date.now() } : null
+      );
+
+      // Log the start location on Day 1's journey (best effort)
+      const day1 = days[0];
+      const realDay =
+        day1?.id && !/^(virtual-|day-|b-day-)/.test(String(day1.id)) && !trip.is_booking;
+      if (c && realDay) {
+        await api
+          .recordReachedPlace({
+            trip_day_id: day1.id,
+            trip_id: rideId,
+            name: startGps.place ? `Ride started · ${startGps.place}` : "Ride started",
+            latitude: c.latitude,
+            longitude: c.longitude,
+            accuracy: c.accuracy,
+            location_source: startGps.place ? "gps_reverse_geocoded" : "gps",
+            odometer: km,
+            notes: "Ride start location",
+          })
+          .catch(() => {});
+      }
+
+      notify(
+        c
+          ? "Ride ACTIVE · live GPS tracking is on. Now tap START DAY."
+          : "Ride ACTIVE (no GPS). Now tap START DAY."
+      );
+      setActionModal(null);
+      setSearchParams({ tripId: rideId });
+      await loadAssignedItem(rideId);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Complete Ride handlers
+  const openCompleteRideModal = () => {
+    setError("");
+    const minKm =
+      trip.opening_km != null
+        ? trip.opening_km
+        : activeDay?.opening_km != null
+          ? activeDay.opening_km
+          : "";
+    setRideCompleteOdo(minKm ? String(minKm) : "");
+    setRideCompleteNotes("");
+    setEndSource("manual");
+    setActionModal("complete_ride");
+  };
+
+  const handleConfirmCompleteRide = async (e) => {
+    e.preventDefault();
+    const km = Number(rideCompleteOdo);
+    if (!km || km < 0) {
+      setError("Please enter a valid closing odometer reading.");
+      return;
+    }
+    const minKm = trip.opening_km != null ? trip.opening_km : activeDay?.opening_km || 0;
+    if (km < minKm) {
+      setError(`Closing reading (${km} km) cannot be less than opening reading (${minKm} km).`);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await api.completeTripRide(trip.id, {
+        closing_km: km,
+        closing_source: endSource,
+        ended_at: new Date().toISOString(),
+        notes: rideCompleteNotes,
+      });
+      const dist = km - minKm;
+      if (tracker.distanceKm > 0)
+        api.updateTripGpsKm?.(trip.id, tracker.distanceKm).catch(() => {});
+      clearTrack(trip.id);
+      notify(`Ride COMPLETED! Total distance: ${dist} km logged.`);
+      setActionModal(null);
+      await loadAssignedItem(trip.id);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Open Start Day Modal
   const openStartDayModal = () => {
     if (!activeDay) return;
+    if (!rideLive) {
+      notify("Start the ride first — tap START RIDE NOW.");
+      return;
+    }
     setError("");
     // Find previous day's closing reading
     const prevDay = days[selectedDayIndex - 1];
     if (prevDay && prevDay.closing_km != null) {
       setStartOdo(String(prevDay.closing_km));
       setStartSource("previous_day");
+    } else if (selectedDayIndex === 0 && trip?.opening_km != null) {
+      setStartOdo(String(trip.opening_km));
+      setStartSource("manual");
     } else if (trip?.vehicle?.odometer != null) {
       setStartOdo(String(trip.vehicle.odometer));
       setStartSource("manual");
@@ -458,7 +724,10 @@ export default function DriverTrip() {
     );
   }
 
-  if (!trip || !days.length) {
+  // Compute filtered items for selector
+  const allItems = driverItems.all || [];
+
+  if (!trip) {
     return (
       <div className="driver-shell">
         <header className="driver-topbar">
@@ -468,21 +737,27 @@ export default function DriverTrip() {
             </span>
             <div>
               <h1>SmartTrip Driver</h1>
-              <p>Today's assigned trip</p>
+              <p>Fleet Rides & Bookings</p>
             </div>
           </div>
-          <Link to="/" className="btn-workspace-link">
-            Workspace
-          </Link>
+          <div className="driver-topbar-actions">
+            {demo && <span className="demo-chip">DEMO</span>}
+            <Link to="/" className="btn-workspace-link">
+              Workspace
+            </Link>
+          </div>
         </header>
 
-        <div className="driver-empty-card">
-          <CarFront size={44} className="text-muted" />
-          <h2>No active tour assigned</h2>
-          <p>You have no pending or in-progress trips assigned today.</p>
-          <Link to="/" className="btn secondary mt-4">
-            Back to Workspace
-          </Link>
+        <div className="driver-empty-card ride-picker-card">
+          <div className="ride-picker-head">
+            <div>
+              <h2>Choose your ride</h2>
+              <p>Most urgent rides are shown first</p>
+            </div>
+            <CarFront size={26} />
+          </div>
+
+          <RidePicker variant="page" items={allItems} onSelect={handleSelectItem} />
         </div>
       </div>
     );
@@ -512,6 +787,10 @@ export default function DriverTrip() {
         ? "In progress"
         : "—";
 
+  const isRideActive = !trip.is_booking && trip.status === "in progress";
+  const isRideCompleted = !trip.is_booking && trip.status === "completed";
+  const isRideNotStarted = trip.is_booking || (!isRideActive && !isRideCompleted);
+
   return (
     <div className="driver-shell">
       {/* 1. Header */}
@@ -522,11 +801,24 @@ export default function DriverTrip() {
           </span>
           <div>
             <h1>SmartTrip Driver</h1>
-            <p>Today's assigned trip</p>
+            <p>
+              {isRideActive ? "Active Ride Cockpit" : trip.is_booking ? "Booking Details" : "Today's Assigned Ride"}
+            </p>
           </div>
         </div>
 
         <div className="driver-topbar-actions">
+          {/* Switch Ride button */}
+          <button
+            type="button"
+            className="driver-switcher-btn"
+            onClick={() => setActionModal("select_ride")}
+            title="View and switch between all rides and bookings"
+          >
+            <Layers size={13} />
+            <span>Rides & Bookings ({allItems.length})</span>
+          </button>
+
           {demo && <span className="demo-chip">DEMO</span>}
           <Link to="/" className="btn-workspace-link" title="Open full desk workspace">
             Desk <ArrowUpRightIcon />
@@ -534,131 +826,312 @@ export default function DriverTrip() {
         </div>
       </header>
 
+
       {/* 2. Active / Assigned Trip Card */}
-      <section className="driver-trip-card">
+      <section className={`driver-trip-card ${isRideActive ? "active-ride-glow" : ""}`}>
         <div className="driver-card-header">
           <div>
-            <span className="driver-assigned-label">ASSIGNED TRIP</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {isRideActive && <span className="pulsing-dot" />}
+              <span
+                className="driver-assigned-label"
+                style={{
+                  color: isRideActive ? "#059669" : trip.is_booking ? "#2563eb" : "#176851",
+                }}
+              >
+                {isRideActive
+                  ? "ACTIVE RIDE IN PROGRESS"
+                  : trip.is_booking
+                    ? "ADVANCE BOOKING"
+                    : isRideCompleted
+                      ? "RIDE COMPLETED"
+                      : "PLANNED RIDE"}
+              </span>
+            </div>
             <h2 className="driver-package-title">
-              {trip.package_name || trip.notes || "Kerala Tour Package"}
+              {trip.package_name || trip.name || trip.notes || "Kerala Tour Package"}
             </h2>
             <div className="driver-customer-name">
               Customer: <b>{trip.client?.name || "Private Guest"}</b>
+              {trip.client?.phone ? ` · 📞 ${trip.client.phone}` : ""}
             </div>
           </div>
-          <Badge>
-            {activeDay.status === "completed"
-              ? "COMPLETED"
-              : activeDay.status === "in progress"
-                ? "IN PROGRESS"
-                : "UPCOMING"}
-          </Badge>
+          <div className="driver-card-head-actions">
+            <Badge>
+              {isRideCompleted
+                ? "COMPLETED"
+                : isRideActive
+                  ? "IN PROGRESS"
+                  : trip.is_booking
+                    ? "BOOKING"
+                    : "UPCOMING"}
+            </Badge>
+            <button
+              type="button"
+              id="btn-edit-ride"
+              className="edit-ride-btn"
+              onClick={() => {
+                setError("");
+                setActionModal("edit_ride");
+              }}
+              aria-label="Edit ride"
+            >
+              <Pencil size={14} />
+              <span>Edit</span>
+            </button>
+          </div>
         </div>
 
-        {/* Day & Route Hero */}
+        {/* Route Hero */}
         <div className="driver-day-hero">
           <div className="driver-day-counter">
-            DAY {activeDay.day_number} OF {days.length}
+            {trip.is_booking
+              ? `PICKUP DATE: ${trip.date}${trip.pickup_time ? ` AT ${trip.pickup_time}` : ""}`
+              : `DAY ${activeDay.day_number} OF ${days.length}`}
           </div>
           <div className="driver-day-route">
-            <span>{activeDay.origin || "Origin"}</span>
+            <span>{trip.origin || activeDay.start_place || "Origin"}</span>
             <ArrowRight size={18} className="route-arrow" />
-            <span>{activeDay.destination || "Destination"}</span>
+            <span>{trip.destination || activeDay.end_place || "Destination"}</span>
           </div>
           <div className="driver-vehicle-badge">
             <CarFront size={16} />
-            <span>Vehicle: <b>{trip.vehicle?.name || "Fleet Vehicle"}</b></span>
+            <span>
+              Vehicle: <b>{trip.vehicle?.name || "Assigned Vehicle"}</b>
+              {trip.vehicle?.model ? ` (${trip.vehicle.model})` : ""}
+            </span>
           </div>
         </div>
 
-        {/* Visual Day Progress Indicator */}
-        <div className="driver-progress-bar-container">
-          <div className="driver-progress-label">
-            <span>Package Progress</span>
-            <b>
-              Day {activeDay.day_number} / {days.length}
-            </b>
-          </div>
-          <div className="driver-progress-segments">
-            {days.map((d, i) => (
-              <button
-                key={d.id}
-                type="button"
-                className={`driver-progress-segment ${
-                  d.status === "completed"
-                    ? "completed"
-                    : i === selectedDayIndex
-                      ? "active"
-                      : "pending"
-                }`}
-                onClick={() => setSelectedDayIndex(i)}
-                title={`Day ${d.day_number}: ${d.name}`}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Context-Aware Primary Action Button */}
-      <section className="driver-primary-action-container">
-        {activeDay.status === "pending" ? (
-          <button
-            type="button"
-            className="driver-primary-btn start-btn"
-            onClick={openStartDayModal}
-          >
-            <div className="btn-glow" />
-            <div className="btn-content">
-              <span className="btn-title">START DAY</span>
-              <span className="btn-subtitle">
-                Opening odometer reading · Day {activeDay.day_number}
-              </span>
+        {/* Live GPS tracking status (whole package) */}
+        {isRideActive && (
+          <div className={`ride-track-chip status-${tracker.status}`} id="ride-track-status">
+            <span className="ride-track-dot" />
+            <LocateFixed size={15} />
+            <div className="ride-track-text">
+              <b>
+                {tracker.status === "live"
+                  ? "Live GPS tracking"
+                  : tracker.status === "weak"
+                    ? "Weak GPS signal"
+                    : tracker.status === "starting"
+                      ? "Finding GPS…"
+                      : tracker.status === "denied"
+                        ? "Location blocked"
+                        : tracker.status === "unsupported"
+                          ? "GPS not available"
+                          : "GPS paused"}
+              </b>
+              <small>
+                {tracker.status === "denied" || tracker.status === "error"
+                  ? tracker.error
+                  : `${tracker.distanceKm.toFixed(1)} km tracked${
+                      tracker.last?.acc ? ` · ±${tracker.last.acc} m` : ""
+                    } · keep this screen open`}
+              </small>
             </div>
-            <ArrowRight size={22} className="btn-icon" />
-          </button>
-        ) : activeDay.status === "in progress" ? (
-          <div className="driver-in-progress-actions">
+          </div>
+        )}
+
+        {/* Start Ride CTA Banner (If ride not yet started) */}
+        {isRideNotStarted && (
+          <div className="start-ride-banner">
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <Sparkles size={18} style={{ color: "#059669" }} />
+              <b style={{ color: "#065f46", fontSize: "0.95rem" }}>
+                {trip.is_booking ? "Advance Booking Ready to Start" : "Package Ready for Departure"}
+              </b>
+            </div>
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "#374151" }}>
+              Start the ride to activate the whole package. GPS will be switched on to track the
+              journey, then you can START DAY 1.
+            </p>
+            {rideMissingFields(trip).length > 0 && (
+              <button
+                type="button"
+                id="btn-fix-ride-details"
+                className="ride-missing-hint"
+                onClick={() => setActionModal("edit_ride")}
+              >
+                <AlertCircle size={14} />
+                <span>
+                  Missing <b>{rideMissingFields(trip).join(", ")}</b> — tap to fix
+                </span>
+                <Pencil size={13} />
+              </button>
+            )}
             <button
               type="button"
-              className="driver-primary-btn reach-btn"
-              onClick={openReachedPlaceModal}
+              className="btn-start-ride-action"
+              onClick={openStartRideModal}
             >
-              <div className="btn-glow" />
-              <div className="btn-content">
-                <span className="btn-title">REACHED PLACE</span>
-                <span className="btn-subtitle">
-                  Tap to capture GPS & record current stop
-                </span>
-              </div>
-              <MapPin size={24} className="btn-icon" />
+              <Navigation size={18} />
+              <span>{trip.is_booking ? "START RIDE (ACTIVATE BOOKING)" : "START RIDE NOW"}</span>
+              <ArrowRight size={18} />
             </button>
           </div>
-        ) : (
-          <div className="driver-completed-banner">
-            <div className="completed-icon">
-              <CheckCircle2 size={24} />
+        )}
+
+        {/* Completed Ride Summary Card */}
+        {isRideCompleted && (
+          <div
+            style={{
+              background: "#f8fafc",
+              border: "1.5px solid #cbd5e1",
+              borderRadius: "14px",
+              padding: "14px 16px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <CheckCircle2 size={20} style={{ color: "#059669" }} />
+              <b style={{ fontSize: "0.95rem", color: "#0f172a" }}>Ride Completed & Logged</b>
             </div>
-            <div>
-              <h3>Day {activeDay.day_number} Completed</h3>
-              <p>
-                {activeDay.origin} → {activeDay.destination} · Logged {todayDistance} km
-              </p>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "8px",
+                marginTop: "10px",
+                fontSize: "0.85rem",
+                color: "#334155",
+              }}
+            >
+              <div>
+                Opening: <b>{trip.opening_km != null ? `${trip.opening_km.toLocaleString()} km` : "—"}</b>
+              </div>
+              <div>
+                Closing: <b>{trip.closing_km != null ? `${trip.closing_km.toLocaleString()} km` : "—"}</b>
+              </div>
+              <div>
+                Total Distance:{" "}
+                <b style={{ color: "#059669" }}>
+                  {trip.opening_km != null && trip.closing_km != null
+                    ? `${trip.closing_km - trip.opening_km} km`
+                    : "—"}
+                </b>
+              </div>
+              <div>
+                Expenses: <b>{money(totalExpenseMinor)}</b>
+              </div>
             </div>
-            {selectedDayIndex + 1 < days.length && (
-              <Button
-                variant="secondary"
-                className="ml-auto"
-                onClick={() => setSelectedDayIndex(selectedDayIndex + 1)}
-              >
-                Day {selectedDayIndex + 2} <ArrowRight size={15} />
-              </Button>
-            )}
+            <button
+              type="button"
+              className="btn secondary"
+              style={{ marginTop: "12px", width: "100%", justifyContent: "center" }}
+              onClick={() => setActionModal("select_ride")}
+            >
+              Switch to Next Ride or Booking
+            </button>
+          </div>
+        )}
+
+        {/* Visual Day Progress Indicator (Only for multi-day trips) */}
+        {!trip.is_booking && days.length > 1 && (
+          <div className="driver-progress-bar-container">
+            <div className="driver-progress-label">
+              <span>Package Progress</span>
+              <b>
+                Day {activeDay.day_number} / {days.length}
+              </b>
+            </div>
+            <div className="driver-progress-segments">
+              {days.map((d, i) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  className={`driver-progress-segment ${
+                    d.status === "completed"
+                      ? "completed"
+                      : i === selectedDayIndex
+                        ? "active"
+                        : "pending"
+                  }`}
+                  onClick={() => setSelectedDayIndex(i)}
+                  title={`Day ${d.day_number}: ${d.name || ""}`}
+                />
+              ))}
+            </div>
           </div>
         )}
       </section>
 
-      {/* 4. Quick Actions (When Day In Progress) */}
-      {activeDay.status === "in progress" && (
+      {/* 3. Context-Aware Primary Action Button */}
+      {!trip.is_booking && (
+        <section className="driver-primary-action-container">
+          {isRideNotStarted ? (
+            <button
+              type="button"
+              id="btn-start-day-locked"
+              className="driver-primary-btn start-btn is-locked"
+              disabled
+              aria-disabled="true"
+              title="Start the ride first"
+            >
+              <div className="btn-content">
+                <span className="btn-title">START DAY {activeDay.day_number}</span>
+                <span className="btn-subtitle">Locked · tap START RIDE NOW above first</span>
+              </div>
+              <Lock size={20} className="btn-icon" />
+            </button>
+          ) : activeDay.status === "pending" ? (
+            <button
+              type="button"
+              className="driver-primary-btn start-btn"
+              onClick={openStartDayModal}
+            >
+              <div className="btn-glow" />
+              <div className="btn-content">
+                <span className="btn-title">START DAY</span>
+                <span className="btn-subtitle">
+                  Opening odometer reading · Day {activeDay.day_number}
+                </span>
+              </div>
+              <ArrowRight size={22} className="btn-icon" />
+            </button>
+          ) : activeDay.status === "in progress" ? (
+            <div className="driver-in-progress-actions">
+              <button
+                type="button"
+                className="driver-primary-btn reach-btn"
+                onClick={openReachedPlaceModal}
+              >
+                <div className="btn-glow" />
+                <div className="btn-content">
+                  <span className="btn-title">REACHED PLACE</span>
+                  <span className="btn-subtitle">
+                    Tap to capture GPS & record current stop
+                  </span>
+                </div>
+                <MapPin size={24} className="btn-icon" />
+              </button>
+            </div>
+          ) : (
+            <div className="driver-completed-banner">
+              <div className="completed-icon">
+                <CheckCircle2 size={24} />
+              </div>
+              <div>
+                <h3>Day {activeDay.day_number} Completed</h3>
+                <p>
+                  {activeDay.origin || "Journey"} → {activeDay.destination || "Destination"} · Logged {todayDistance} km
+                </p>
+              </div>
+              {selectedDayIndex + 1 < days.length && (
+                <Button
+                  variant="secondary"
+                  className="ml-auto"
+                  onClick={() => setSelectedDayIndex(selectedDayIndex + 1)}
+                >
+                  Day {selectedDayIndex + 2} <ArrowRight size={15} />
+                </Button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 4. Quick Actions (When ride active and Day In Progress) */}
+      {isRideActive && activeDay.status === "in progress" && (
         <section className="driver-quick-actions-grid">
           <button
             type="button"
@@ -722,6 +1195,28 @@ export default function DriverTrip() {
               <small>Close journey</small>
             </div>
           </button>
+
+          <button
+            type="button"
+            className="quick-action-card action-complete-ride"
+            onClick={openCompleteRideModal}
+            style={{
+              background: "#0f172a",
+              color: "#ffffff",
+              border: "1px solid #334155",
+            }}
+          >
+            <div
+              className="action-icon-circle"
+              style={{ background: "#1e293b", color: "#10b981" }}
+            >
+              <CheckCircle2 size={22} />
+            </div>
+            <div>
+              <b style={{ color: "#ffffff" }}>COMPLETE RIDE</b>
+              <small style={{ color: "#94a3b8" }}>Finish journey</small>
+            </div>
+          </button>
         </section>
       )}
 
@@ -769,6 +1264,16 @@ export default function DriverTrip() {
       <section className="driver-timeline-panel">
         <div className="timeline-header">
           <h2>TODAY'S JOURNEY</h2>
+          {!trip.is_booking && activeDay && !/^(virtual-|day-|b-day-)/.test(String(activeDay.id)) && (
+            <button
+              type="button"
+              id="btn-edit-day-plan"
+              className="edit-inline-link"
+              onClick={() => setActionModal("edit_day")}
+            >
+              <Pencil size={12} /> Edit plan
+            </button>
+          )}
           <span className="timeline-subtitle">
             {activeDay.name} · {activeDay.date}
           </span>
@@ -852,6 +1357,339 @@ export default function DriverTrip() {
           })}
         </div>
       </section>
+
+      {/* 7. Ride Level Completion Button when Active */}
+      {isRideActive && (
+        <section style={{ marginTop: "0.85rem" }}>
+          <button
+            type="button"
+            className="btn-complete-ride-action"
+            style={{ width: "100%" }}
+            onClick={openCompleteRideModal}
+          >
+            <CheckCircle2 size={18} />
+            <span>END RIDE / COMPLETE RIDE</span>
+          </button>
+        </section>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: EDIT RIDE / DAY PLAN (in place)                       */}
+      {/* ============================================================ */}
+      {(actionModal === "edit_ride" || actionModal === "edit_day") && (
+        <EditRideSheet
+          trip={trip}
+          day={activeDay}
+          api={api}
+          canAssign={profile?.role !== "driver"}
+          initialTab={actionModal === "edit_day" ? "day" : "ride"}
+          onClose={() => setActionModal(null)}
+          onSaved={async (msg) => {
+            notify(msg);
+            setActionModal(null);
+            await loadAssignedItem(trip.id);
+            refresh();
+          }}
+        />
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: START RIDE BOTTOM SHEET                               */}
+      {/* ============================================================ */}
+      {actionModal === "start_ride" && (
+        <div className="driver-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="driver-bottom-sheet">
+            <header className="sheet-header">
+              <div>
+                <h2>{trip.is_booking ? "Start Booking Ride" : "Start Trip Ride"}</h2>
+                <p>
+                  {trip.name} · {trip.origin} → {trip.destination}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="sheet-close"
+                onClick={() => setActionModal(null)}
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <form onSubmit={handleConfirmStartRide} className="sheet-content">
+              {/* Step 1: GPS */}
+              <div className={`ride-gps-step status-${startGps.status}`} id="start-ride-gps">
+                <div className="ride-gps-icon">
+                  {startGps.status === "locating" ? (
+                    <RefreshCw size={18} className="animate-spin" />
+                  ) : startGps.status === "ok" ? (
+                    <CheckCircle2 size={18} />
+                  ) : startGps.status === "denied" || startGps.status === "error" ? (
+                    <AlertCircle size={18} />
+                  ) : (
+                    <LocateFixed size={18} />
+                  )}
+                </div>
+                <div className="ride-gps-body">
+                  <b>
+                    {startGps.status === "locating"
+                      ? "Turning on GPS…"
+                      : startGps.status === "ok"
+                        ? "GPS is ON · tracking will start"
+                        : startGps.status === "denied"
+                          ? "Location permission needed"
+                          : startGps.status === "error"
+                            ? "Could not get your location"
+                            : "Turn on GPS"}
+                  </b>
+                  <small>
+                    {startGps.status === "ok"
+                      ? `${startGps.place || "Current location found"} · ±${startGps.coords.accuracy} m`
+                      : startGps.status === "denied"
+                        ? "Allow location for this site (tap the 🔒 icon in the address bar), turn on device location, then retry."
+                        : startGps.status === "error"
+                          ? startGps.error
+                          : "Allow location when your phone asks."}
+                  </small>
+                  {(startGps.status === "denied" || startGps.status === "error" || startGps.status === "idle") && (
+                    <div className="ride-gps-actions">
+                      <button type="button" className="ride-gps-retry" onClick={requestStartGps}>
+                        <LocateFixed size={14} /> {startGps.status === "idle" ? "Turn on GPS" : "Retry GPS"}
+                      </button>
+                      <label className="ride-gps-skip">
+                        <input
+                          type="checkbox"
+                          checked={skipStartGps}
+                          onChange={(e) => setSkipStartGps(e.target.checked)}
+                        />
+                        Start without GPS
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="field">
+                <span>Opening Odometer Reading (KM)</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  placeholder="e.g. 26357"
+                  value={rideStartOdo}
+                  onChange={(e) => {
+                    setRideStartOdo(e.target.value);
+                    setStartSource("manual");
+                  }}
+                  className="driver-large-input"
+                />
+              </div>
+
+              {/* Photo capture for OCR */}
+              <div className="photo-capture-box">
+                <label className="btn-camera-trigger">
+                  <Camera size={18} />
+                  <span>Take Odometer Photo (OCR Scan)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      handleOdometerPhoto(e, "start");
+                    }}
+                  />
+                </label>
+                {odoOcrBusy && (
+                  <div className="ocr-busy-tag">
+                    <RefreshCw size={14} className="animate-spin" /> Scanning reading…
+                  </div>
+                )}
+                {detectedOdo && (
+                  <div className="ocr-detected-box">
+                    <span>
+                      Odometer detected: <b>{detectedOdo} km</b>
+                    </span>
+                    <button
+                      type="button"
+                      className="text-link"
+                      onClick={() => {
+                        setRideStartOdo(String(detectedOdo));
+                        setDetectedOdo(null);
+                      }}
+                    >
+                      Use this reading
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {error && <div className="sheet-error">{error}</div>}
+
+              <div className="sheet-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setActionModal(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={busy || !rideStartOdo || (!startGps.coords && !skipStartGps)}
+                  className="btn-start-ride-action"
+                >
+                  {busy
+                    ? "Starting…"
+                    : startGps.status === "locating" && !skipStartGps
+                      ? "Waiting for GPS…"
+                      : "Start Ride & Track"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: COMPLETE RIDE BOTTOM SHEET                            */}
+      {/* ============================================================ */}
+      {actionModal === "complete_ride" && (
+        <div className="driver-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="driver-bottom-sheet">
+            <header className="sheet-header">
+              <div>
+                <h2>Complete & End Ride</h2>
+                <p>
+                  {trip.name} · {trip.origin} → {trip.destination}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="sheet-close"
+                onClick={() => setActionModal(null)}
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <form onSubmit={handleConfirmCompleteRide} className="sheet-content">
+              <div className="field">
+                <span>Closing Odometer Reading (KM)</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  placeholder="e.g. 26520"
+                  value={rideCompleteOdo}
+                  onChange={(e) => {
+                    setRideCompleteOdo(e.target.value);
+                    setEndSource("manual");
+                  }}
+                  className="driver-large-input"
+                />
+              </div>
+
+              {/* Ride Summary Review Card */}
+              {trip.opening_km != null && rideCompleteOdo && Number(rideCompleteOdo) >= trip.opening_km && (
+                <div className="end-day-summary-card">
+                  <h4>Ride Completion Summary</h4>
+                  <div className="summary-row">
+                    <span>Opening Odometer</span>
+                    <b>{trip.opening_km.toLocaleString()} km</b>
+                  </div>
+                  <div className="summary-row">
+                    <span>Closing Odometer</span>
+                    <b>{Number(rideCompleteOdo).toLocaleString()} km</b>
+                  </div>
+                  <div className="summary-row highlight">
+                    <span>Total Distance Travelled</span>
+                    <b>{(Number(rideCompleteOdo) - trip.opening_km).toFixed(1)} km</b>
+                  </div>
+                  <div className="summary-row">
+                    <span>Stops Recorded</span>
+                    <b>{dayPlaces.length}</b>
+                  </div>
+                  <div className="summary-row">
+                    <span>Trip Expenses</span>
+                    <b>{money(totalExpenseMinor)}</b>
+                  </div>
+                </div>
+              )}
+
+              <div className="field">
+                <span>Closing Notes (Optional)</span>
+                <input
+                  type="text"
+                  placeholder="e.g. Safe trip, dropped at hotel, client satisfied"
+                  value={rideCompleteNotes}
+                  onChange={(e) => setRideCompleteNotes(e.target.value)}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "0.9rem",
+                  }}
+                />
+              </div>
+
+              {error && <div className="sheet-error">{error}</div>}
+
+              <div className="sheet-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setActionModal(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    busy ||
+                    !rideCompleteOdo ||
+                    (trip.opening_km != null && Number(rideCompleteOdo) < trip.opening_km)
+                  }
+                  className="btn-complete-ride-action"
+                >
+                  {busy ? "Completing…" : "Confirm & Complete Ride"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: SELECT RIDE OR BOOKING DRAWER                         */}
+      {/* ============================================================ */}
+      {actionModal === "select_ride" && (
+        <div className="driver-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="driver-bottom-sheet ride-picker-sheet">
+            <header className="sheet-header">
+              <div>
+                <h2>Switch ride</h2>
+                <p>{allItems.length} rides & bookings · most urgent first</p>
+              </div>
+              <button
+                type="button"
+                className="sheet-close"
+                onClick={() => setActionModal(null)}
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <div className="sheet-content ride-sheet-body">
+              <RidePicker
+                variant="sheet"
+                items={allItems}
+                currentId={trip?.id}
+                onSelect={handleSelectItem}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* MODAL 1: START DAY BOTTOM SHEET                             */}

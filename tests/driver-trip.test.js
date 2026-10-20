@@ -131,3 +131,52 @@ test("Location Service: autocomplete search and distance calculation", async () 
   const d = calculateDistanceKm(10.0889, 77.0595, 9.6031, 77.1615);
   assert.ok(d > 50 && d < 70, `Distance between Munnar and Thekkady should be ~55-65km (got ${d}km)`);
 });
+
+test("Driver Trip: getDriverItems lists both trips and bookings with active ride indicators", async () => {
+  const repo = repository(true, null);
+  const items = await repo.getDriverItems();
+
+  assert.ok(items.trips.length > 0, "Should return trips");
+  assert.ok(items.bookings.length > 0, "Should return advance bookings");
+  assert.ok(items.all.length >= items.trips.length + items.bookings.length);
+
+  const booking = items.bookings.find((b) => b.id === "b1");
+  assert.ok(booking, "Booking b1 should be found");
+  assert.equal(booking.item_type, "booking");
+  assert.equal(booking.origin, "Cochin International Airport (COK)");
+});
+
+test("Driver Trip: selecting a booking loads driver overview and starting ride converts and activates it", async () => {
+  const repo = repository(true, null);
+
+  // 1. Select booking in driver mode
+  const assignedBooking = await repo.getAssignedDriverTrip(null, "b1");
+  assert.ok(assignedBooking, "Should load assigned booking");
+  assert.equal(assignedBooking.is_booking, true);
+  assert.equal(assignedBooking.days.length, 1, "Should have 1 default journey day");
+
+  // 2. Start ride from booking
+  const activeRide = await repo.startBookingRide("b1", {
+    opening_km: 26357,
+    started_at: "2026-10-20T10:30:00.000Z",
+  });
+
+  assert.ok(activeRide.id, "Active ride trip ID generated");
+  assert.equal(activeRide.status, "in progress");
+  assert.equal(activeRide.opening_km, 26357);
+
+  // 3. Complete the ride
+  await assert.rejects(
+    repo.completeTripRide(activeRide.id, { closing_km: 26000 }),
+    /Closing odometer must be at least the opening reading/
+  );
+
+  const completedRide = await repo.completeTripRide(activeRide.id, {
+    closing_km: 26425,
+    ended_at: "2026-10-20T12:00:00.000Z",
+    notes: "Smooth airport drop",
+  });
+
+  assert.equal(completedRide.status, "completed");
+  assert.equal(completedRide.closing_km, 26425);
+});
