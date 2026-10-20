@@ -28,6 +28,7 @@ import { Button, Modal } from "./ui";
 export const nav = [
   ["/", "Overview", LayoutDashboard],
   ["/trips", "Trips", Route],
+  ["/driver", "Driver trip mode", Navigation],
   ["/bookings", "Bookings", CalendarDays],
   ["/clients", "Clients", Users],
   ["/vehicles", "Vehicles", CarFront],

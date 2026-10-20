@@ -19,7 +19,8 @@ const Dashboard = lazy(() => import("./pages/Dashboard")),
   Settings = lazy(() => import("./pages/Settings")),
   Documents = lazy(() => import("./pages/Documents")),
   Intelligence = lazy(() => import("./pages/Intelligence")),
-  Notifications = lazy(() => import("./pages/Notifications"));
+  Notifications = lazy(() => import("./pages/Notifications")),
+  DriverTrip = lazy(() => import("./pages/DriverTrip"));
 class Boundary extends Component {
   state = { error: false };
   static getDerivedStateFromError() {
@@ -43,12 +44,22 @@ function App() {
   const { demo, session, profile, loading } = useApp();
   if (loading) return <Loading />;
   if (!demo && (!session || !profile)) return <Login />;
+  if (!demo && profile?.role === "driver")
+    return (
+      <BrowserRouter>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="*" element={<DriverTrip />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    );
   if (!demo && !["admin", "staff"].includes(profile.role))
     return (
       <div className="empty">
         <h1>Access restricted</h1>
         <p>
-          This release supports owner and office staff access. Driver and client
+          This release supports owner, office staff, and driver access. Client
           portals are not enabled.
         </p>
       </div>
@@ -87,6 +98,7 @@ function App() {
             <Route path="documents" element={<Documents />} />
             <Route path="assistant" element={<Intelligence />} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="driver" element={<DriverTrip />} />
             <Route
               path="*"
               element={

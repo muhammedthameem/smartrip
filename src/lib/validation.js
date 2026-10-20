@@ -1,4 +1,4 @@
-import { distance, hours, invoiceTotal } from "./calculations";
+import { distance, hours, invoiceTotal } from "./calculations.js";
 export function validateRecord(table, row) {
   if (
     [

@@ -18,6 +18,7 @@ test("PostgreSQL migration and adversarial tenant / financial checks", async () 
   );
   await db.exec(migration);
   await db.exec(await readFile(new URL('../supabase/migrations/002_ai.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/003_driver_trip_days.sql',import.meta.url),'utf8'));
   const a = "11111111-1111-4111-8111-111111111111",
     b = "22222222-2222-4222-8222-222222222222";
   await db.query("insert into auth.users(id) values($1),($2)", [a, b]);
