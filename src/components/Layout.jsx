@@ -65,8 +65,13 @@ export default function Layout() {
       window.removeEventListener("offline", change);
     };
   }, []);
+  // App-like navigation: every new screen starts at the top
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [loc.pathname]);
+  const isDriverRoute = loc.pathname.startsWith("/driver");
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isDriverRoute ? "route-driver" : ""}`}>
       <aside className="sidebar">
         <Link to="/" className="brand">
           <span className="brand-mark">
@@ -124,7 +129,7 @@ export default function Layout() {
             this page open.
           </div>
         )}
-        <main>
+        <main key={loc.pathname} className="screen">
           <Outlet />
         </main>
         <footer className="app-footer">

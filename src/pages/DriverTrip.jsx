@@ -794,34 +794,49 @@ export default function DriverTrip() {
   return (
     <div className="driver-shell">
       {/* 1. Header */}
-      <header className="driver-topbar">
+      <header className={`driver-topbar ${isRideActive ? "is-live" : ""}`}>
         <div className="driver-brand">
           <span className="driver-brand-icon">
-            <Navigation size={20} fill="currentColor" />
+            <Navigation size={18} fill="currentColor" />
           </span>
-          <div>
+          <div className="driver-brand-text">
             <h1>SmartTrip Driver</h1>
-            <p>
-              {isRideActive ? "Active Ride Cockpit" : trip.is_booking ? "Booking Details" : "Today's Assigned Ride"}
+            <p className="driver-brand-status">
+              <span className={`status-dot ${isRideActive ? "live" : isRideCompleted ? "done" : trip.is_booking ? "booking" : "idle"}`} />
+              {isRideActive
+                ? "Ride live"
+                : isRideCompleted
+                  ? "Ride completed"
+                  : trip.is_booking
+                    ? "Booking"
+                    : "Assigned ride"}
             </p>
           </div>
         </div>
 
         <div className="driver-topbar-actions">
+          {demo && <span className="demo-chip">DEMO</span>}
           {/* Switch Ride button */}
           <button
             type="button"
             className="driver-switcher-btn"
             onClick={() => setActionModal("select_ride")}
             title="View and switch between all rides and bookings"
+            aria-label={`Rides and bookings (${allItems.length})`}
           >
-            <Layers size={13} />
-            <span>Rides & Bookings ({allItems.length})</span>
+            <Layers size={15} />
+            <span className="switcher-label">Rides</span>
+            <span className="switcher-count">{allItems.length}</span>
           </button>
 
-          {demo && <span className="demo-chip">DEMO</span>}
-          <Link to="/" className="btn-workspace-link" title="Open full desk workspace">
-            Desk <ArrowUpRightIcon />
+          <Link
+            to="/"
+            className="btn-workspace-link"
+            title="Open full desk workspace"
+            aria-label="Open desk workspace"
+          >
+            <span className="desk-label">Desk</span>
+            <ArrowUpRightIcon />
           </Link>
         </div>
       </header>
@@ -1026,7 +1041,7 @@ export default function DriverTrip() {
         )}
 
         {/* Visual Day Progress Indicator (Only for multi-day trips) */}
-        {!trip.is_booking && days.length > 1 && (
+        {!trip.is_booking && !isRideCompleted && days.length > 1 && (
           <div className="driver-progress-bar-container">
             <div className="driver-progress-label">
               <span>Package Progress</span>
@@ -1056,7 +1071,7 @@ export default function DriverTrip() {
       </section>
 
       {/* 3. Context-Aware Primary Action Button */}
-      {!trip.is_booking && (
+      {!trip.is_booking && !isRideCompleted && (
         <section className="driver-primary-action-container">
           {isRideNotStarted ? (
             <button
