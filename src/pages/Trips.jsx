@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Archive } from "lucide-react";
 import { useApp, useList, useDebounce } from "../lib/context";
@@ -36,12 +36,53 @@ export default function Trips() {
   const [page, setPage] = useState(0);
   const [showNewModal, setShowNewModal] = useState(false);
   const [busyId, setBusyId] = useState("");
+  const railRef = useRef(null);
+  const [railEdges, setRailEdges] = useState({ left: false, right: false });
   const { rows, count, loading, error } = useList("trips", {
     page,
     search: useDebounce(search),
     filters: { status },
   });
   const hasFilters = Boolean(search || status);
+
+  const syncRail = useCallback(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const left = el.scrollLeft > 4;
+    const right = max - el.scrollLeft > 4;
+    setRailEdges((prev) =>
+      prev.left === left && prev.right === right ? prev : { left, right },
+    );
+  }, []);
+
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+    syncRail();
+    el.addEventListener("scroll", syncRail, { passive: true });
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(syncRail);
+    observer?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", syncRail);
+      observer?.disconnect();
+    };
+  }, [syncRail]);
+
+  useEffect(() => {
+    const el = railRef.current;
+    const active = el?.querySelector(".trip-chip.is-active");
+    if (!el || !active) return;
+    const railBox = el.getBoundingClientRect();
+    const chipBox = active.getBoundingClientRect();
+    const delta =
+      chipBox.left +
+      chipBox.width / 2 -
+      (railBox.left + railBox.width / 2);
+    if (Math.abs(delta) < 2) return;
+    el.scrollTo({ left: el.scrollLeft + delta, behavior: "smooth" });
+  }, [status]);
 
   const resetFilters = () => {
     setSearch("");
@@ -97,21 +138,34 @@ export default function Trips() {
           }}
           placeholder="Search voucher number…"
         />
-        <div className="trip-filter-chips" role="group" aria-label="Filter by status">
-          {TRIP_STATUSES.map((s) => (
-            <button
-              key={s || "all"}
-              type="button"
-              className={"trip-chip" + (status === s ? " is-active" : "")}
-              aria-pressed={status === s}
-              onClick={() => {
-                setStatus(s);
-                setPage(0);
-              }}
-            >
-              {statusLabel(s)}
-            </button>
-          ))}
+        <div
+          className={
+            "trip-chip-rail" +
+            (railEdges.left ? " can-left" : "") +
+            (railEdges.right ? " can-right" : "")
+          }
+        >
+          <div
+            className="trip-filter-chips"
+            ref={railRef}
+            role="group"
+            aria-label="Filter by status"
+          >
+            {TRIP_STATUSES.map((s) => (
+              <button
+                key={s || "all"}
+                type="button"
+                className={"trip-chip" + (status === s ? " is-active" : "")}
+                aria-pressed={status === s}
+                onClick={() => {
+                  setStatus(s);
+                  setPage(0);
+                }}
+              >
+                {statusLabel(s)}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 

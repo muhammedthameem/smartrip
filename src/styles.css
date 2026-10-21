@@ -942,8 +942,12 @@ select {
   width: 100%;
 }
 
-.empty svg {
+.empty > svg {
   margin: 0 auto 18px;
+}
+
+.empty .btn svg {
+  margin: 0;
 }
 
 .empty h3 {
@@ -6638,14 +6642,50 @@ dialog[open],
   font-size: 14px;
 }
 
+.trip-chip-rail {
+  position: relative;
+  min-width: 0;
+}
+
+.trip-chip-rail::before,
+.trip-chip-rail::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.trip-chip-rail::before {
+  left: 0;
+  background: linear-gradient(90deg, #fff 20%, rgba(255, 255, 255, 0));
+}
+
+.trip-chip-rail::after {
+  right: 0;
+  background: linear-gradient(270deg, #fff 20%, rgba(255, 255, 255, 0));
+}
+
+.trip-chip-rail.can-left::before,
+.trip-chip-rail.can-right::after {
+  opacity: 1;
+}
+
 .trip-filter-chips {
   display: flex;
   align-items: center;
   gap: 8px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  padding-bottom: 1px;
+  padding: 5px;
+  scroll-padding-inline: 5px;
 }
 
 .trip-filter-chips::-webkit-scrollbar {
@@ -7088,9 +7128,13 @@ dialog[open],
     border-radius: 16px;
   }
 
-  .trip-filter-chips {
+  .trip-chip-rail {
     margin-inline: -12px;
+  }
+
+  .trip-filter-chips {
     padding-inline: 12px;
+    scroll-padding-inline: 12px;
   }
 
   .trips-page .trip-grid {
