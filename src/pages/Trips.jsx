@@ -1,136 +1,136 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Plus, ArrowUpRight, MapPin, ArrowRight, Route, Navigation, Luggage } from "lucide-react";
-import { useList, useDebounce } from "../lib/context";
+import { Link } from "react-router-dom";
+import { Plus, Archive } from "lucide-react";
+import { useApp, useList, useDebounce } from "../lib/context";
 import {
   PageHeader,
   SearchBox,
-  Badge,
   Button,
   Loading,
   ErrorBox,
   Empty,
   Pagination,
-  RecordName,
 } from "../components/ui";
+import { TripCard } from "../components/TripCard";
+import { useConfirm } from "../components/Confirm";
 import NewTripModal from "../components/NewTripModal";
 
-export function TripCard({ trip }) {
-  const navigate = useNavigate();
-  const openDriverMode = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    navigate("/driver?tripId=" + trip.id);
-  };
-  return (
-    <Link className="trip-card" to={"/trips/" + trip.id}>
-      <div className="trip-card-head">
-        <span>{trip.name}</span>
-        <div style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
-          {trip.package_name && (
-            <span className="package-badge-tag" title={trip.package_name}>
-              <Luggage size={11} /> Package
-            </span>
-          )}
-          {trip.status === "in progress" && (
-            <span
-              role="link"
-              tabIndex={0}
-              className="badge"
-              style={{
-                background: "#ecfdf5",
-                color: "#065f46",
-                borderColor: "#a7f3d0",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                textDecoration: "none",
-                fontSize: "0.72rem",
-                fontWeight: 700,
-                padding: "2px 6px",
-                cursor: "pointer",
-              }}
-              onClick={openDriverMode}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openDriverMode(e)}
-            >
-              <Navigation size={11} fill="currentColor" /> Driver mode
-            </span>
-          )}
-          <Badge>{trip.status}</Badge>
-        </div>
-      </div>
-      <div className="trip-route">
-        <h3>{trip.origin || "Route to be added"}</h3>
-        <ArrowRight size={18} />
-        <h3>{trip.destination || "Destination"}</h3>
-      </div>
-      <div className="trip-meta">
-        <span>
-          <RecordName table="clients" id={trip.client_id} />
-        </span>
-        <span>{trip.date}</span>
-      </div>
-      <div className="trip-bottom">
-        <span>
-          <RecordName table="vehicles" id={trip.vehicle_id} />
-        </span>
-        <ArrowUpRight size={17} />
-      </div>
-    </Link>
-  );
-}
+const TRIP_STATUSES = [
+  "",
+  "in progress",
+  "planned",
+  "booked",
+  "completed",
+  "draft",
+  "cancelled",
+];
+
+const statusLabel = (status) =>
+  status ? status.charAt(0).toUpperCase() + status.slice(1) : "All trips";
+
 export default function Trips() {
-  const [search, setSearch] = useState(""),
-    [status, setStatus] = useState(""),
-    [page, setPage] = useState(0),
-    [showNewModal, setShowNewModal] = useState(false);
+  const { api, refresh, notify } = useApp();
+  const confirm = useConfirm();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(0);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [busyId, setBusyId] = useState("");
   const { rows, count, loading, error } = useList("trips", {
     page,
     search: useDebounce(search),
     filters: { status },
   });
+  const hasFilters = Boolean(search || status);
+
+  const resetFilters = () => {
+    setSearch("");
+    setStatus("");
+    setPage(0);
+  };
+
+  const archiveTrip = async (trip) => {
+    const ok = await confirm({
+      title: "Archive this trip?",
+      message: "Archive " + trip.name + " and remove it from the active list?",
+      detail:
+        "Historical links will be preserved. You can restore it from Archived trips at any time.",
+      confirmLabel: "Archive trip",
+      icon: Archive,
+      tone: "warning",
+    });
+    if (!ok) return;
+    setBusyId(trip.id);
+    try {
+      await api.archive("trips", trip.id);
+      notify("Trip archived");
+      refresh();
+    } catch (e) {
+      notify(e.message || "Could not archive trip");
+    } finally {
+      setBusyId("");
+    }
+  };
+
   return (
-    <>
+    <div className="trips-page">
       <PageHeader
+        eyebrow="YOUR JOURNEYS"
         title="Trips"
         subtitle="From the first kilometre to the final stop."
       >
+        <Link className="btn secondary" to="/trips/archived">
+          <Archive size={17} /> Archived
+        </Link>
         <Button onClick={() => setShowNewModal(true)}>
           <Plus size={18} /> New trip
         </Button>
       </PageHeader>
       <NewTripModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} />
-      <section className="panel">
-        <div className="toolbar">
-          <SearchBox
-            value={search}
-            onChange={(v) => {
-              setSearch(v);
-              setPage(0);
-            }}
-            placeholder="Search voucher number…"
-          />
-          <select
-            aria-label="Trip status"
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(0);
-            }}
-          >
-            <option value="">All statuses</option>
-            {[
-              "draft",
-              "booked",
-              "planned",
-              "in progress",
-              "completed",
-              "cancelled",
-            ].map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
+
+      <section className="trips-controls" aria-label="Find trips">
+        <SearchBox
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            setPage(0);
+          }}
+          placeholder="Search voucher number…"
+        />
+        <div className="trip-filter-chips" role="group" aria-label="Filter by status">
+          {TRIP_STATUSES.map((s) => (
+            <button
+              key={s || "all"}
+              type="button"
+              className={"trip-chip" + (status === s ? " is-active" : "")}
+              aria-pressed={status === s}
+              onClick={() => {
+                setStatus(s);
+                setPage(0);
+              }}
+            >
+              {statusLabel(s)}
+            </button>
+          ))}
         </div>
+      </section>
+
+      {!loading && !error && (
+        <div className="trips-summary" aria-live="polite">
+          <span>
+            <b>{count}</b> {count === 1 ? "trip" : "trips"}
+            {status ? <span className="trips-summary-tag"> · {statusLabel(status)}</span> : null}
+            {search ? <span className="trips-summary-tag"> · “{search}”</span> : null}
+          </span>
+          {hasFilters && (
+            <button type="button" className="trips-reset" onClick={resetFilters}>
+              Reset filters
+            </button>
+          )}
+        </div>
+      )}
+
+      <section className="trips-results">
         {loading ? (
           <Loading />
         ) : error ? (
@@ -138,17 +138,38 @@ export default function Trips() {
         ) : rows.length ? (
           <div className="trip-grid">
             {rows.map((r) => (
-              <TripCard key={r.id} trip={r} />
+              <TripCard
+                key={r.id}
+                trip={r}
+                onArchive={archiveTrip}
+                busy={busyId === r.id}
+              />
             ))}
           </div>
         ) : (
           <Empty
-            title="The road is yours"
-            text="Create your first trip to start tracking the journey."
-          />
+            title={hasFilters ? "No trips found" : "The road is yours"}
+            text={
+              hasFilters
+                ? "Try a different status or search term."
+                : "Create your first trip to start tracking the journey."
+            }
+          >
+            {hasFilters ? (
+              <Button variant="secondary" onClick={resetFilters}>
+                Clear filters
+              </Button>
+            ) : (
+              <Button onClick={() => setShowNewModal(true)}>
+                <Plus size={17} /> Create trip
+              </Button>
+            )}
+          </Empty>
         )}
-        <Pagination page={page} setPage={setPage} count={count} />
+        {!loading && count > 0 && (
+          <Pagination page={page} setPage={setPage} count={count} />
+        )}
       </section>
-    </>
+    </div>
   );
 }

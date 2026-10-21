@@ -2,6 +2,7 @@ import React, { Suspense, lazy, Component } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Provider, useApp } from "./lib/context";
+import { ConfirmProvider } from "./components/Confirm";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import { Loading } from "./components/ui";
@@ -12,6 +13,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard")),
 
   Records = lazy(() => import("./pages/Records")),
   Trips = lazy(() => import("./pages/Trips")),
+  Archived = lazy(() => import("./pages/Archived")),
   TripForm = lazy(() => import("./pages/TripForm")),
   TripDetail = lazy(() => import("./pages/TripDetail")),
   Finance = lazy(() => import("./pages/Finance")),
@@ -71,6 +73,7 @@ function App() {
           <Route element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="trips" element={<Trips />} />
+            <Route path="trips/archived" element={<Archived />} />
             <Route path="trips/new" element={<TripForm />} />
             <Route path="trips/:id/edit" element={<TripForm />} />
             <Route path="trips/:id" element={<TripDetail />} />
@@ -120,9 +123,11 @@ if (import.meta.hot) import.meta.hot.data.root = root;
 root.render(
   <Boundary>
     <Provider>
-      <App />
-      <UpdatePrompt />
-      <InstallPrompt />
+      <ConfirmProvider>
+        <App />
+        <UpdatePrompt />
+        <InstallPrompt />
+      </ConfirmProvider>
     </Provider>
   </Boundary>,
 );

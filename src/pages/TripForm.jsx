@@ -25,6 +25,7 @@ import {
   Badge,
 } from "../components/ui";
 import ScheduleNotice from "../components/ScheduleNotice";
+import { useConfirm } from "../components/Confirm";
 
 export const PACKAGE_PRESETS = [
   {
@@ -238,6 +239,7 @@ const steps = [
 ];
 
 export default function TripForm() {
+  const confirm = useConfirm();
   const { id } = useParams(),
     [searchParams, setSearchParams] = useSearchParams(),
     navigate = useNavigate(),
@@ -978,8 +980,15 @@ export default function TripForm() {
                             type="button"
                             variant="icon secondary"
                             aria-label={"Remove place " + (i + 1)}
-                            onClick={() => {
-                              if (confirm("Remove this place?"))
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: "Remove this stop?",
+                                message:
+                                  "Remove place " + (i + 1) + " from the itinerary?",
+                                confirmLabel: "Remove",
+                                tone: "warning",
+                              });
+                              if (ok)
                                 set(
                                   "places",
                                   form.places.filter((_, j) => j !== i),

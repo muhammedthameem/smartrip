@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Pencil,
   Printer,
@@ -12,6 +12,8 @@ import {
   Users,
   CalendarDays,
   StickyNote,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { useApp, useList } from "../lib/context";
 import { distance, hours, money } from "../lib/calculations";
@@ -23,16 +25,20 @@ import {
   RecordName,
 } from "../components/ui";
 import PrintDocument from "../components/PrintDocument";
+import { useConfirm } from "../components/Confirm";
 
 export default function TripDetail() {
   const { id } = useParams(),
-    { api, version } = useApp(),
+    { api, version, refresh, notify } = useApp(),
     [trip, setTrip] = useState(null),
     [packageDays, setPackageDays] = useState([]),
     [expandedDayId, setExpandedDayId] = useState(null),
     [selectedDayTimeline, setSelectedDayTimeline] = useState(null),
     [error, setError] = useState(""),
+    [archiveBusy, setArchiveBusy] = useState(false),
     [print, setPrint] = useState(false);
+  const navigate = useNavigate();
+  const confirm = useConfirm();
   const { rows: expenses, count } = useList("expenses", {
     filters: { trip_id: id },
     limit: 100,
@@ -50,6 +56,7 @@ export default function TripDetail() {
   if (error) return <ErrorBox message={error} />;
   if (!trip) return <Loading />;
 
+  const archived = Boolean(trip.archived);
   const dist = distance(trip.opening_km, trip.closing_km);
   const dur = hours(trip.start_time, trip.end_time);
   const expenseTotal = expenses.reduce((s, e) => s + (e.amount_minor || 0), 0);
@@ -74,6 +81,44 @@ export default function TripDetail() {
     }
   };
 
+  const toggleArchive = async () => {
+    if (archiveBusy) return;
+    const restoring = Boolean(trip.archived);
+    const ok = await confirm(
+      restoring
+        ? {
+            title: "Restore this trip?",
+            message: "Move " + trip.name + " back to active trips?",
+            detail: "Its history, days and expenses stay exactly as they are.",
+            confirmLabel: "Restore trip",
+            icon: ArchiveRestore,
+          }
+        : {
+            title: "Archive this trip?",
+            message:
+              "Archive " + trip.name + " and remove it from the active list?",
+            detail:
+              "Historical links will be preserved. You can restore it from Archived trips at any time.",
+            confirmLabel: "Archive trip",
+            icon: Archive,
+            tone: "warning",
+          },
+    );
+    if (!ok) return;
+    setArchiveBusy(true);
+    try {
+      if (restoring) await api.unarchive("trips", id);
+      else await api.archive("trips", id);
+      notify(restoring ? "Trip restored" : "Trip archived");
+      refresh();
+      if (!restoring) navigate("/trips");
+    } catch (e) {
+      notify(e.message || "Could not update trip");
+    } finally {
+      setArchiveBusy(false);
+    }
+  };
+
   const kpis = [
     { icon: Gauge, label: "Distance", value: dist == null ? "—" : `${dist} km`, hint: dist == null ? "Not completed" : "Odometer" },
     { icon: Clock3, label: "Duration", value: dur == null ? "—" : `${dur.toFixed(1)} h`, hint: dur == null ? "Not completed" : "Start → end" },
@@ -95,10 +140,29 @@ export default function TripDetail() {
       {/* HERO */}
       <section className="td-hero">
         <div className="td-hero-top">
-          <Badge>{trip.status}</Badge>
-          <span className="td-date">
-            <CalendarDays size={13} /> {trip.date || "No date"}
-          </span>
+          <div className="td-hero-tags">
+            <Badge>{trip.status}</Badge>
+            {archived && (
+              <span className="td-archived-flag">
+                <Archive size={12} /> Archived
+              </span>
+            )}
+          </div>
+          <div className="td-hero-tools">
+            <span className="td-date">
+              <CalendarDays size={13} /> {trip.date || "No date"}
+            </span>
+            <button
+              type="button"
+              className="td-hero-icon"
+              onClick={toggleArchive}
+              disabled={archiveBusy}
+              aria-label={archived ? "Restore trip" : "Archive trip"}
+              title={archived ? "Restore trip" : "Archive trip"}
+            >
+              {archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+            </button>
+          </div>
         </div>
         <h1 className="td-title">{trip.name}</h1>
 
@@ -120,15 +184,31 @@ export default function TripDetail() {
           </div>
         </div>
 
-        <div className="td-actions">
-          <Link className="td-action primary" to={"/driver?tripId=" + id}>
-            <Navigation size={17} />
-            <span>Driver mode</span>
-          </Link>
-          <Link className="td-action" to={"/trips/" + id + "/edit"}>
-            <Pencil size={17} />
-            <span>Edit</span>
-          </Link>
+        <div
+          className={"td-actions" + (archived ? " is-archived" : "")}
+        >
+          {archived ? (
+            <button
+              type="button"
+              className="td-action primary"
+              onClick={toggleArchive}
+              disabled={archiveBusy}
+            >
+              <ArchiveRestore size={17} />
+              <span>{archiveBusy ? "Restoring…" : "Restore trip"}</span>
+            </button>
+          ) : (
+            <>
+              <Link className="td-action primary" to={"/driver?tripId=" + id}>
+                <Navigation size={17} />
+                <span>Driver mode</span>
+              </Link>
+              <Link className="td-action" to={"/trips/" + id + "/edit"}>
+                <Pencil size={17} />
+                <span>Edit</span>
+              </Link>
+            </>
+          )}
           <button type="button" className="td-action" onClick={() => setPrint(true)}>
             <Printer size={17} />
             <span>Voucher</span>

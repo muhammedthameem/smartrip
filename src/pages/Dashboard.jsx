@@ -22,7 +22,7 @@ import {
   Button,
   Badge,
 } from "../components/ui";
-import { TripCard } from "./Trips";
+import { TripCard } from "../components/TripCard";
 import NewTripModal from "../components/NewTripModal";
 export default function Dashboard() {
   const { api, version } = useApp(),

@@ -179,10 +179,18 @@ export function repository(demo, org) {
   return {
     async list(
       table,
-      { page = 0, search = "", filters = {}, limit = 20 } = {},
+      {
+        page = 0,
+        search = "",
+        filters = {},
+        limit = 20,
+        archivedOnly = false,
+      } = {},
     ) {
       if (demo) {
-        let rows = db()[table].filter((r) => !r.archived);
+        let rows = db()[table].filter(
+          (r) => Boolean(r.archived) === archivedOnly,
+        );
         if (search)
           rows = rows.filter((r) =>
             JSON.stringify(r).toLowerCase().includes(search.toLowerCase()),
@@ -198,7 +206,7 @@ export function repository(demo, org) {
         .from(table)
         .select("*", { count: "exact" })
         .eq("org_id", org)
-        .eq("archived", false)
+        .eq("archived", archivedOnly)
         .order("created_at", { ascending: false })
         .range(page * limit, (page + 1) * limit - 1);
       if (search) q = q.ilike("name", "%" + search + "%");
@@ -332,6 +340,77 @@ export function repository(demo, org) {
     },
     async archive(table, id) {
       return this.save(table, { id, archived: true });
+    },
+    async unarchive(table, id) {
+      if (demo) {
+        const rows = db()[table],
+          old = rows.find((r) => r.id === id);
+        if (!old) throw new Error("Record not found");
+        old.archived = false;
+        old.updated_at = new Date().toISOString();
+        persist();
+        return enrichTripRecord(table, old);
+      }
+      const { data, error } = await supabase
+        .from(table)
+        .update({ archived: false })
+        .eq("id", id)
+        .eq("org_id", org)
+        .select()
+        .single();
+      if (error) throw error;
+      return enrichTripRecord(table, data);
+    },
+    async remove(table, id) {
+      if (demo) {
+        const data = db(),
+          rows = data[table],
+          index = rows.findIndex((r) => r.id === id);
+        if (index < 0) throw new Error("Record not found");
+        const refs = [],
+          countRefs = (list, field, label) => {
+            const n = (list || []).filter((r) => r[field] === id).length;
+            if (n) refs.push(n + " " + label + (n === 1 ? "" : "s"));
+          };
+        if (table === "clients") {
+          countRefs(data.trips, "client_id", "trip");
+          countRefs(data.bookings, "client_id", "booking");
+          countRefs(data.invoices, "client_id", "invoice");
+        } else if (table === "drivers") {
+          countRefs(data.trips, "driver_id", "trip");
+          countRefs(data.bookings, "driver_id", "booking");
+        } else if (table === "vehicles") {
+          countRefs(data.trips, "vehicle_id", "trip");
+          countRefs(data.bookings, "vehicle_id", "booking");
+          countRefs(data.expenses, "vehicle_id", "expense");
+          countRefs(data.maintenance, "vehicle_id", "maintenance record");
+          countRefs(data.fuel_logs, "vehicle_id", "fuel log");
+        }
+        if (refs.length)
+          throw new Error(
+            "This " +
+              (table === "clients" ? "client" : table === "drivers" ? "driver" : "record") +
+              " is still linked to " +
+              refs.join(", ") +
+              ". Archive it instead to keep the history.",
+          );
+        rows.splice(index, 1);
+        persist();
+        return { id };
+      }
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .eq("id", id)
+        .eq("org_id", org);
+      if (error) {
+        if (error.code === "23503")
+          throw new Error(
+            "This record is still linked to other data. Archive it instead to keep the history.",
+          );
+        throw error;
+      }
+      return { id };
     },
     async report(from, to) {
       if (demo) {

@@ -1,6 +1,13 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Pencil, Archive, ArrowRight, Download } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Archive,
+  ArrowRight,
+  Download,
+  Trash2,
+} from "lucide-react";
 import { modules } from "../lib/schema";
 import { suggestCategory } from "../lib/intelligence";
 import { useApp, useList, useDebounce } from "../lib/context";
@@ -19,8 +26,10 @@ import {
   Badge,
 } from "../components/ui";
 import ScheduleNotice from "../components/ScheduleNotice";
+import { useConfirm } from "../components/Confirm";
 export default function Records({ table }) {
-  const config = modules[table],
+  const confirm = useConfirm(),
+    config = modules[table],
     { api, refresh, notify } = useApp(),
     navigate = useNavigate(),
     [search, setSearch] = useState(""),
@@ -77,14 +86,38 @@ export default function Records({ table }) {
     }
   }
   async function archive(row) {
-    if (
-      !confirm("Archive " + row.name + "? Historical links will be preserved.")
-    )
-      return;
+    const ok = await confirm({
+      title: "Archive this " + config.singular + "?",
+      message: "Archive " + row.name + "?",
+      detail:
+        "Historical links will be preserved, but the record will be hidden from the active list.",
+      confirmLabel: "Archive",
+      icon: Archive,
+      tone: "warning",
+    });
+    if (!ok) return;
     try {
       await api.archive(table, row.id);
       refresh();
       notify("Record archived");
+    } catch (e) {
+      notify(e.message);
+    }
+  }
+  async function remove(row) {
+    const ok = await confirm({
+      title: "Delete this " + config.singular + "?",
+      message: "Permanently delete " + row.name + "?",
+      detail:
+        "This cannot be undone. If the record is linked to trips or invoices, archive it instead.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
+    try {
+      await api.remove(table, row.id);
+      refresh();
+      notify("Record deleted");
     } catch (e) {
       notify(e.message);
     }
@@ -211,6 +244,16 @@ export default function Records({ table }) {
                   >
                     <Archive size={16} />
                   </Button>
+                  {(table === "clients" || table === "drivers") && (
+                    <Button
+                      variant="icon ghost delete"
+                      aria-label={"Delete " + r.name}
+                      title={"Delete " + r.name}
+                      onClick={() => remove(r)}
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  )}
                 </div>
               </article>
             ))}
@@ -221,12 +264,15 @@ export default function Records({ table }) {
       {edit && (
         <Modal
           title={(edit.id ? "Edit " : "New ") + config.singular}
-          onClose={() => {
-            if (
-              !busy &&
-              confirm("Close this form? Unsaved changes will be lost.")
-            )
-              setEdit(null);
+          onClose={async () => {
+            if (busy) return;
+            const ok = await confirm({
+              title: "Discard changes?",
+              message: "Close this form? Unsaved changes will be lost.",
+              confirmLabel: "Discard",
+              tone: "warning",
+            });
+            if (ok) setEdit(null);
           }}
         >
           <form onSubmit={save}>

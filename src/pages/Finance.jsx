@@ -25,8 +25,10 @@ import {
   RecordName,
 } from "../components/ui";
 import PrintDocument from "../components/PrintDocument";
+import { useConfirm } from "../components/Confirm";
 export default function Finance({ table }) {
-  const invoiceMode = table === "invoices",
+  const confirm = useConfirm(),
+    invoiceMode = table === "invoices",
     { api, refresh, notify, version } = useApp(),
     [params] = useSearchParams(),
     [edit, setEdit] = useState(null),
@@ -191,12 +193,15 @@ export default function Finance({ table }) {
     }
   }
   async function cancel(row) {
-    if (
-      !confirm(
-        "Cancel this invoice? This requires zero net payments and cannot be undone here.",
-      )
-    )
-      return;
+    const ok = await confirm({
+      title: "Cancel this invoice?",
+      message: "Cancel invoice " + row.name + "?",
+      detail:
+        "This requires zero net payments and cannot be undone here. Remove linked payments or refunds first.",
+      confirmLabel: "Cancel invoice",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       const { rows: payments } = await api.list("payments", {
         filters: { invoice_id: row.id },
@@ -299,8 +304,15 @@ export default function Finance({ table }) {
       {edit && (
         <Modal
           title={invoiceMode ? "Create invoice" : "Record payment"}
-          onClose={() => {
-            if (!busy && confirm("Discard this unsaved form?")) setEdit(null);
+          onClose={async () => {
+            if (busy) return;
+            const ok = await confirm({
+              title: "Discard changes?",
+              message: "Close this form? Unsaved changes will be lost.",
+              confirmLabel: "Discard",
+              tone: "warning",
+            });
+            if (ok) setEdit(null);
           }}
         >
           <form onSubmit={save}>

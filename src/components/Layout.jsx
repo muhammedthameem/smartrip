@@ -22,12 +22,14 @@ import {
   WifiOff,
   Navigation,
   Sparkles,
+  Archive,
 } from "lucide-react";
 import { useApp } from "../lib/context";
 import { Button, Modal } from "./ui";
 export const nav = [
   ["/", "Overview", LayoutDashboard],
   ["/trips", "Trips", Route],
+  ["/trips/archived", "Archived trips", Archive],
   ["/driver", "Driver trip mode", Navigation],
   ["/bookings", "Bookings", CalendarDays],
   ["/clients", "Clients", Users],
@@ -137,12 +139,14 @@ export default function Layout() {
         </footer>
       </div>
       <nav className="bottom-nav">
-        {[nav[0], nav[1], nav[3], nav[6]].map(([path, name, Icon]) => (
-          <NavLink key={path} to={path} end={path === "/"}>
-            <Icon size={20} />
-            <span>{name === "Overview" ? "Home" : name}</span>
-          </NavLink>
-        ))}
+        {["/", "/trips", "/bookings", "/drivers"]
+          .map((path) => nav.find(([to]) => to === path))
+          .map(([path, name, Icon]) => (
+            <NavLink key={path} to={path} end={path === "/"}>
+              <Icon size={20} />
+              <span>{name === "Overview" ? "Home" : name}</span>
+            </NavLink>
+          ))}
         <button onClick={() => setMenu(true)} aria-expanded={menu}>
           <Menu size={20} />
           <span>More</span>

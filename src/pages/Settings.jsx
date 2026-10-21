@@ -5,8 +5,10 @@ import { resetDemo, configured } from "../lib/repository";
 import { askAI } from "../lib/ai";
 import { PageHeader, Field, Button, Badge } from "../components/ui";
 import { isAppInstalled } from "../components/InstallPrompt";
+import { useConfirm } from "../components/Confirm";
 export default function Settings() {
-  const { api, demo, profile, refresh, notify, signOut } = useApp(),
+  const confirm = useConfirm(),
+    { api, demo, profile, refresh, notify, signOut } = useApp(),
     { rows } = useList("settings", { limit: 1 }),
     [form, setForm] = useState({
       name: "",
@@ -230,12 +232,18 @@ export default function Settings() {
               </p>
               <Button
                 variant="secondary"
-                onClick={() => {
-                  if (
-                    confirm(
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Reset the demo workspace?",
+                    message:
                       "Reset all demo changes to the original sample records?",
-                    )
-                  ) {
+                    detail:
+                      "Only fictional data in this browser is reset. Supabase is never touched.",
+                    confirmLabel: "Reset demo",
+                    icon: RotateCcw,
+                    tone: "danger",
+                  });
+                  if (ok) {
                     resetDemo();
                     refresh();
                     notify("Demo reset");

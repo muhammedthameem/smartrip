@@ -13,8 +13,10 @@ import {
   Badge,
   Pagination,
 } from "../components/ui";
+import { useConfirm } from "../components/Confirm";
 export default function Documents() {
-  const { api, demo, refresh, notify } = useApp(),
+  const confirm = useConfirm(),
+    { api, demo, refresh, notify } = useApp(),
     [file, setFile] = useState(null),
     [type, setType] = useState("Trip voucher"),
     [trip, setTrip] = useState(null),
@@ -114,12 +116,15 @@ export default function Documents() {
                 <Button
                   variant="secondary"
                   onClick={async () => {
-                    if (
-                      !confirm(
+                    const ok = await confirm({
+                      title: "Verify this document?",
+                      message:
                         "Have you reviewed the original document and verified its details?",
-                      )
-                    )
-                      return;
+                      detail: "Verified documents are marked as checked in your records.",
+                      confirmLabel: "Verify document",
+                      tone: "default",
+                    });
+                    if (!ok) return;
                     try {
                       await api.save("documents", { ...r, verified: true });
                       refresh();
