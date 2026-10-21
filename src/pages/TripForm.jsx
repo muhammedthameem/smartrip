@@ -656,6 +656,7 @@ export default function TripForm() {
                       table="clients"
                       value={form.client_id}
                       onChange={(v) => set("client_id", v)}
+                      allowCreate
                     />
                   </Field>
 
@@ -790,6 +791,7 @@ export default function TripForm() {
                       table="drivers"
                       value={form.driver_id}
                       onChange={(v) => set("driver_id", v)}
+                      allowCreate
                     />
                   </Field>
                   <Field label="Air conditioning">

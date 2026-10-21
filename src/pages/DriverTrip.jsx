@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   Navigation,
@@ -1388,6 +1389,8 @@ export default function DriverTrip() {
         </section>
       )}
 
+      {createPortal(
+        <>
       {/* ============================================================ */}
       {/* MODAL: EDIT RIDE / DAY PLAN (in place)                       */}
       {/* ============================================================ */}
@@ -2252,6 +2255,9 @@ export default function DriverTrip() {
             </form>
           </div>
         </div>
+      )}
+        </>,
+        document.body,
       )}
     </div>
   );
